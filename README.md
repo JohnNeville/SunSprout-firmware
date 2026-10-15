@@ -298,3 +298,13 @@ Turn it on with the **Enable MPPT** switch — the board package enables it by d
 
 This is why there is no separate power monitor on the board and no VINDPM-chasing script
 in the configuration.
+
+## Licence
+
+The configuration in this repository is released under the [MIT licence](LICENSE), the same as
+[esphome-bq-drivers](https://github.com/JohnNeville/esphome-bq-drivers). The board design is
+under the CERN Open Hardware Licence in [SunSprout](https://github.com/JohnNeville/SunSprout).
+
+A compiled firmware image also contains ESPHome's C++ runtime, which is GPLv3. If you distribute
+images, offer the corresponding source: this repository, the driver repository and the ESPHome
+version you built with.
