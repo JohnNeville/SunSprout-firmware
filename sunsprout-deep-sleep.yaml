@@ -49,6 +49,7 @@ globals:
   - id: prevent_sleep_global
     type: bool
     restore_value: true
+    update_interval: 1s
     initial_value: "false"
 
 deep_sleep:
@@ -57,20 +58,35 @@ deep_sleep:
   sleep_duration: 15min
 
 switch:
+  # The switch shows the persisted flag and nothing else, so there is one source of truth: the
+  # flag survives reboots and power cycles, and the boot hook above holds sleep off before the
+  # deep_sleep component starts its timer. (A template switch with its own restored state next to
+  # the flag can disagree with it after a restore and clear it.)
   - platform: template
     name: "Prevent Deep Sleep"
     id: prevent_sleep
     icon: "mdi:sleep-off"
     entity_category: config
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_OFF
-    on_turn_on:
+    assumed_state: true
+    # No restore of its own: a restored "off" would run turn_off_action at boot and clear the flag.
+    restore_mode: DISABLED
+    lambda: 'return id(prevent_sleep_global);'
+    turn_on_action:
       - globals.set:
           id: prevent_sleep_global
           value: "true"
+      # A persisted global is copied into the settings store on its own update tick (set to one
+      # second below) and the store is written to flash about once a minute. Wait for the tick,
+      # then write now, so a reboot straight after the switch is turned on does not lose it.
+      - delay: 1500ms
+      - lambda: global_preferences->sync();
       - deep_sleep.prevent: deep_sleep_control
-    on_turn_off:
+    turn_off_action:
       - globals.set:
           id: prevent_sleep_global
           value: "false"
+      - delay: 1500ms
+      - lambda: global_preferences->sync();
+      # Give a moment before the board is allowed to sleep again.
+      - delay: 60s
       - deep_sleep.allow: deep_sleep_control
