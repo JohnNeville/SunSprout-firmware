@@ -1,0 +1,5 @@
+# ESPHome secrets (WiFi credentials, API key)
+secrets.yaml
+
+# ESPHome build output
+.esphome/

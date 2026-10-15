@@ -1,6 +1,18 @@
-# Firmware
+# SunSprout firmware
 
-ESPHome configuration for the SunSprout hub.
+ESPHome configuration for the SunSprout hub. The board itself (schematic, PCB, docs) is in
+[SunSprout](https://github.com/JohnNeville/SunSprout); this repository moved out of it so that
+firmware changes do not add commits to the hardware history.
+
+Use the packages from a device file with, for example:
+
+```yaml
+packages:
+  hub: github://JohnNeville/SunSprout-firmware/sunsprout-hub.yaml@main
+  common: github://JohnNeville/SunSprout-firmware/sunsprout-common.yaml@main
+```
+
+Pin `@main` to a release tag such as `@hub-rev-a` to stay on a version that matches a board revision.
 
 | File | What it is |
 |---|---|
@@ -9,6 +21,8 @@ ESPHome configuration for the SunSprout hub.
 | `sunsprout-deep-sleep.yaml` | Optional deep sleep for battery or solar hubs. Leave it out while setting a board up. |
 | `example-device.yaml` | A complete device: the three packages above plus a name, WiFi, the Home Assistant API and OTA, all from `secrets.yaml`. Copy this to make your own. |
 | `sunsprout-factory.yaml` | A factory image with no credentials. It starts in setup mode so the end user supplies the WiFi. |
+| `battery-burn-test.yaml` | Test image: drains a cell to a cutoff voltage, then deep-sleeps so the radio stops draining it. |
+| `fg-alert-test.yaml` | Test image: does the fuel gauge pull `FG_ALERT` low, and does that wake the board from deep sleep. |
 
 The two chip drivers live in a separate repository,
 [esphome-bq-drivers](https://github.com/JohnNeville/esphome-bq-drivers), because they are
@@ -25,7 +39,7 @@ Create `secrets.yaml` next to the config with `wifi_ssid`, `wifi_password`,
 `fallback_password` and `api_encryption_key`, then:
 
 ```bash
-esphome run firmware/example-device.yaml
+esphome run example-device.yaml
 ```
 
 Hold `SW2` (boot) while pressing `SW1` (reset) to enter download mode for the first flash.
@@ -82,7 +96,7 @@ unconfigured board stays awake. On first boot the board starts its own access po
   package and adds secrets, so the owner can then add `sunsprout-deep-sleep.yaml`, change the
   substitutions, or anything else, without editing the factory file.
 
-Build the image with `esphome compile firmware/sunsprout-factory.yaml` and flash the
+Build the image with `esphome compile sunsprout-factory.yaml` and flash the
 `.factory.bin` at offset `0x0`.
 
 ## Using a standard lithium-ion cell
@@ -136,7 +150,7 @@ charger will not charge.
 | BQ25798 charger | internal | `0x6B` |
 | BQ34Z100 fuel gauge | internal | `0x55` |
 
-See [ESP32-C5 module](../docs/hub/modules/esp32-c5-mcu.md) for the full pin assignment.
+See [ESP32-C5 module](https://github.com/JohnNeville/SunSprout/blob/main/docs/hub/modules/esp32-c5-mcu.md) for the full pin assignment.
 
 ## The two I2C buses
 

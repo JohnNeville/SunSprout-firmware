@@ -8,7 +8,7 @@
 # Include it as a package:
 #
 #   packages:
-#     hub: !include firmware/sunsprout-hub.yaml
+#     hub: !include sunsprout-hub.yaml
 #
 # Override any of the substitutions below in your own config.
 
