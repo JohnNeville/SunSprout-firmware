@@ -77,6 +77,8 @@ i2c:
 
 # --- Charger ---------------------------------------------------------------
 bq25798:
+  # The id lets a device file call bq25798.configure_battery on it. See sunsprout-factory.yaml.
+  id: charger
   i2c_id: bus_internal
   address: 0x6B
   update_interval: 30s
