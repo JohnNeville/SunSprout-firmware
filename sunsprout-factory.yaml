@@ -149,13 +149,19 @@ script:
             - delay: 500ms
             - button.press: factory_reset_button
 
+  # Only after boot: the entities publish their restored values while the board is starting,
+  # and recomputing then would overwrite an energy value the owner had edited.
   - id: fill_energy
     then:
-      - lambda: |-
-          const bool lifepo4 = id(cell_chemistry).active_index().value_or(0) == 0;
-          float mwh = id(battery_capacity_mah).state * (lifepo4 ? 3.2f : 3.7f);
-          if (mwh > 32767.0f) mwh = 32767.0f;
-          id(battery_energy_mwh).make_call().set_value(mwh).perform();
+      - if:
+          condition:
+            lambda: 'return id(battery_ready);'
+          then:
+            - lambda: |-
+                const bool lifepo4 = id(cell_chemistry).active_index().value_or(0) == 0;
+                float mwh = id(battery_capacity_mah).state * (lifepo4 ? 3.2f : 3.7f);
+                if (mwh > 32767.0f) mwh = 32767.0f;
+                id(battery_energy_mwh).make_call().set_value(mwh).perform();
 
   # Writes the four values to the charger (charge voltage limit, termination current, charge
   # current) and the gauge (design capacity and energy, LFPRelax). The gauge compares each
