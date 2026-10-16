@@ -1,12 +1,28 @@
 # Factory image: a SunSprout hub that carries no WiFi credentials.
 #
 # Flash this once and the board comes up in setup mode. The end user then gives it
-# a network in any of three ways:
+# a network in any of four ways:
 #
 #   - from a browser over USB, through the Improv prompt on the ESP Web Tools page;
+#   - from a phone over Bluetooth, with any Improv Bluetooth client: connect, then press
+#     the BOOT button (SW2) within a minute to authorise the change;
 #   - by joining the "Sunsprout Setup" access point and using the captive portal;
 #   - by adopting it in the ESPHome dashboard, which writes a normal device file that
 #     pulls this one in as a package and adds the secrets (see dashboard_import below).
+#
+# Setup stays open for five minutes after power-up. If nobody has provisioned the board
+# by then the access point, the portal and both Improv transports close, and the status
+# LED blinks slowly. Cycle the power to open the window again.
+#
+# Holding the BOOT button for ten seconds erases the saved settings, including any WiFi
+# credentials given through Improv or the portal, and restarts the board in setup mode.
+# The LED stays on for the last half second before the restart.
+#
+# The cell is set after setup, not at build time: the Cell Chemistry, Battery Capacity,
+# Battery Energy and Default Charge Current entities (configuration category) are kept in
+# flash and written to the charger and the fuel gauge at every boot. Until they are changed
+# the board assumes a 6000 mAh LiFePO4 cell, which charges to 3.65 V and cannot overcharge
+# a lithium-ion cell either. Choosing Li-ion raises the limit to 4.2 V.
 #
 # It has no API encryption key and no OTA password, because those belong to whoever
 # owns the board: adopting it generates them. It does not include deep sleep, so an
@@ -28,6 +44,14 @@ esphome:
   name: "${name}"
   friendly_name: "${friendly_name}"
   name_add_mac_suffix: true
+  on_boot:
+    # After the charger and gauge have set themselves up and the entities above have been restored.
+    - priority: 100
+      then:
+        - globals.set:
+            id: battery_ready
+            value: "true"
+        - script.execute: apply_battery
   project:
     name: JohnNeville.SunSproutHub
     version: factory
@@ -49,3 +73,196 @@ wifi:
 captive_portal:
 
 improv_serial:
+
+# Bluetooth setup for phones. The BOOT button authorises a change, so a stranger in
+# range cannot set the network while the window is open.
+esp32_ble:
+
+esp32_improv:
+  authorizer: boot_button
+  authorized_duration: 1min
+
+# The window is counted from power-up and only runs while the board has no network. When
+# it expires the transports above close; the LED is the only sign left.
+provisioning:
+  timeout: 5min
+  on_timeout:
+    then:
+      - logger.log:
+          level: WARN
+          format: "Provisioning window timed out. Cycle the power to try again."
+      - light.turn_on:
+          id: status_led
+          effect: "Slow Blink"
+
+light:
+  - id: !extend status_led
+    effects:
+      - strobe:
+          name: "Slow Blink"
+          colors:
+            - state: true
+              duration: 750ms
+            - state: false
+              duration: 750ms
+
+# SW2 pulls GPIO28 low and has a 10 kOhm pull-up on the board. GPIO28 is a boot-mode
+# strapping pin, which only matters at reset: holding the button during power-up still
+# enters the download mode, as it always has.
+binary_sensor:
+  - platform: gpio
+    id: boot_button
+    internal: true
+    pin:
+      number: GPIO28
+      mode:
+        input: true
+      inverted: true
+      ignore_strapping_warning: true
+    on_press:
+      then:
+        - script.execute: hold_to_reset
+    on_release:
+      then:
+        - script.stop: hold_to_reset
+
+globals:
+  - id: battery_ready
+    type: bool
+    initial_value: "false"
+
+script:
+  - id: hold_to_reset
+    mode: restart
+    then:
+      - delay: 10s
+      - if:
+          condition:
+            binary_sensor.is_on: boot_button
+          then:
+            - logger.log:
+                level: WARN
+                format: "BOOT held for 10 s: erasing the saved settings."
+            - light.turn_on:
+                id: status_led
+                effect: none
+            - delay: 500ms
+            - button.press: factory_reset_button
+
+  - id: fill_energy
+    then:
+      - lambda: |-
+          const bool lifepo4 = id(cell_chemistry).active_index().value_or(0) == 0;
+          float mwh = id(battery_capacity_mah).state * (lifepo4 ? 3.2f : 3.7f);
+          if (mwh > 32767.0f) mwh = 32767.0f;
+          id(battery_energy_mwh).make_call().set_value(mwh).perform();
+
+  # Writes the four values to the charger (charge voltage limit, termination current, charge
+  # current) and the gauge (design capacity and energy, LFPRelax). The gauge compares each
+  # value with its data flash first and only writes what differs, so running this at every
+  # boot does not wear it.
+  - id: apply_battery
+    mode: restart
+    then:
+      # The entities above publish their restored values while the board is still starting,
+      # before the charger and gauge are ready. The boot step sets this flag and applies once.
+      - if:
+          condition:
+            lambda: 'return id(battery_ready);'
+          then:
+            - script.execute: write_battery
+
+  - id: write_battery
+    then:
+      - bq25798.configure_battery:
+          id: charger
+          chemistry: !lambda |-
+            return id(cell_chemistry).active_index().value_or(0) == 1 ? std::string("li_ion") : std::string("lifepo4");
+          battery_capacity: !lambda 'return (uint16_t) id(battery_capacity_mah).state;'
+          charge_current: !lambda 'return (uint16_t) id(default_charge_current).state;'
+      - bq34z100.configure_pack:
+          id: fuel_gauge
+          design_capacity: !lambda 'return (uint16_t) id(battery_capacity_mah).state;'
+          design_energy: !lambda 'return (uint16_t) id(battery_energy_mwh).state;'
+          lifepo4_relax: !lambda 'return id(cell_chemistry).active_index().value_or(0) == 0;'
+
+button:
+  - platform: factory_reset
+    id: factory_reset_button
+    name: "Restart with Factory Default Settings"
+    internal: true
+
+# --- Cell settings, chosen by the owner after setup -----------------------------------------
+# Template entities restored from flash. The defaults are the substitutions above.
+select:
+  - platform: template
+    name: "Cell Chemistry"
+    id: cell_chemistry
+    icon: "mdi:battery-heart-variant"
+    entity_category: config
+    options: ["LiFePO4", "Li-ion"]
+    initial_option: "LiFePO4"
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        - script.execute: fill_energy
+        - script.execute: apply_battery
+
+number:
+  - platform: template
+    name: "Battery Capacity"
+    id: battery_capacity_mah
+    icon: "mdi:battery"
+    entity_category: config
+    unit_of_measurement: "mAh"
+    mode: box
+    min_value: 100
+    max_value: 20000
+    step: 50
+    initial_value: ${battery_capacity}
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        - script.execute: fill_energy
+        - script.execute: apply_battery
+
+  # Filled in from the capacity and the chemistry whenever either changes (3.2 V per cell for
+  # LiFePO4, 3.7 V for lithium-ion); edit it afterwards if the cell's datasheet says otherwise.
+  # The gauge stores it in a signed 16-bit field, so 32767 mWh is the ceiling.
+  - platform: template
+    name: "Battery Energy"
+    id: battery_energy_mwh
+    icon: "mdi:battery-charging-high"
+    entity_category: config
+    unit_of_measurement: "mWh"
+    mode: box
+    min_value: 100
+    max_value: 32767
+    step: 10
+    initial_value: ${battery_energy_mwh}
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        - script.execute: apply_battery
+
+  # The charge current applied at every boot. "Charge Current Limit" changes it live but is
+  # forgotten at the next reset; this one is kept.
+  - platform: template
+    name: "Default Charge Current"
+    id: default_charge_current
+    icon: "mdi:current-dc"
+    entity_category: config
+    unit_of_measurement: "mA"
+    mode: box
+    min_value: 100
+    max_value: 2000
+    step: 50
+    initial_value: ${charge_current}
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        - script.execute: apply_battery

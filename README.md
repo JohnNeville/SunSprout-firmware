@@ -86,15 +86,55 @@ so use a terminal that reconnects, such as `tio /dev/ttyACM0` or `esphome logs`.
 `sunsprout-factory.yaml` is for shipping a board whose owner is not you. It has no WiFi
 credentials, no API encryption key and no OTA password, and it leaves deep sleep out so an
 unconfigured board stays awake. On first boot the board starts its own access point
-(`Sunsprout Setup`) and offers three ways to join a network:
+(`Sunsprout Setup`) and offers four ways to join a network:
 
 - **Improv over USB.** Flash from a browser with ESP Web Tools and it asks for the SSID and
   password straight away (`improv_serial`).
+- **Improv over Bluetooth, from a phone.** Connect with any Improv Bluetooth client, then
+  press the BOOT button (`SW2`) within a minute. The button press authorises the change, so
+  someone in range cannot set the network on their own.
 - **Captive portal.** Join the access point and the portal opens a WiFi picker.
 - **Adopt in the ESPHome dashboard.** The `dashboard_import` entry makes the board appear as
   discovered. Adopting it writes a normal device file that pulls the factory file in as a
   package and adds secrets, so the owner can then add `sunsprout-deep-sleep.yaml`, change the
   substitutions, or anything else, without editing the factory file.
+
+Setup stays open for five minutes after power-up and only while the board has no network.
+If it is still unprovisioned then, the access point, the portal and both Improv transports
+close and the status LED blinks slowly. Cycle the power to open the window again.
+
+To start again, hold the BOOT button (`SW2`) for ten seconds. The LED comes on, then the
+board erases its saved settings, including any WiFi credentials, and restarts in setup mode.
+The button is the one that pulls `GPIO28` low; the RESET button (`SW1`) cannot be used for
+this because it pulls the chip's EN pin, which the firmware cannot read. Holding BOOT while
+the board powers up still enters the download mode as before.
+
+### Setting the cell
+
+The factory image does not need a rebuild to match the cell. Once the board is on the network
+it shows four settings in the configuration section of its page in Home Assistant (or the
+ESPHome dashboard):
+
+| Entity | Default | What it does |
+|---|---|---|
+| Cell Chemistry | LiFePO4 | `LiFePO4` charges to 3.65 V; `Li-ion` charges to 4.2 V. Also sets the gauge's LFPRelax bits. |
+| Battery Capacity | 6000 mAh | Sets the charge termination current (C/10) and the gauge's design capacity. |
+| Battery Energy | 19200 mWh | The gauge's design energy. Filled in from the capacity (x 3.2 V for LiFePO4, x 3.7 V for Li-ion) whenever the capacity or chemistry changes; edit it afterwards if the datasheet differs. 32767 mWh is the most the gauge can hold. |
+| Default Charge Current | 1000 mA | The charge current applied at every boot, up to the board's 2000 mA limit. "Charge Current Limit" changes the live value but is forgotten at the next reset. |
+
+The values are kept in flash and written to the charger and the fuel gauge at every boot. The
+gauge compares each value with its data flash first and only writes what differs, so this does
+not wear it. Improv and the setup portal can only take a WiFi name and password, so these are
+set after setup rather than during it.
+
+Until they are changed the board assumes a 6000 mAh LiFePO4 cell. That is the safe default: it
+charges to 3.65 V, which cannot overcharge either chemistry, while the 4.2 V limit is only
+applied once `Li-ion` is chosen. Choose the chemistry that matches the cell; a LiFePO4 cell on
+the 4.2 V limit is damaged.
+
+One limit applies: the fuel gauge's chemistry table (the 400-series profile LiFePO4 needs for an
+accurate Battery Level) cannot be written over I2C. These settings cover everything else; the
+table is loaded when the gauge is programmed at the factory with bqStudio.
 
 Build the image with `esphome compile sunsprout-factory.yaml` and flash the
 `.factory.bin` at offset `0x0`.
