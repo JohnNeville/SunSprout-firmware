@@ -98,7 +98,7 @@ provisioning:
       - logger.log:
           level: WARN
           format: "Provisioning window timed out. Cycle the power to try again."
-      - lambda: 'id(provisioning_window).status_set_warning("provisioning window timed out");'
+      - lambda: 'id(provisioning_window).status_set_warning();'
 
 # GPIO6 drives the LED through R3. The hub package puts a "Status LED" light on the same pin;
 # this image gives the pin to ESPHome's status LED instead.
@@ -148,7 +148,7 @@ script:
             - logger.log:
                 level: WARN
                 format: "BOOT held for 10 s: erasing the saved settings."
-            - lambda: 'id(provisioning_window).status_set_error("erasing the saved settings");'
+            - lambda: 'id(provisioning_window).status_set_error();'
             - delay: 1500ms
             - button.press: factory_reset_button
 
