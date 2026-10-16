@@ -101,9 +101,13 @@ unconfigured board stays awake. On first boot the board starts its own access po
 
 Setup stays open for five minutes after power-up and only while the board has no network.
 If it is still unprovisioned then, the access point, the portal and both Improv transports
-close and the status LED blinks slowly. Cycle the power to open the window again.
+close and the status LED pulses slowly. Cycle the power to open the window again. The LED is ESPHome's
+own `status_led`: it pulses slowly on a warning, flashes fast on an error and is off otherwise, and nothing
+about it is saved, so a blink never comes back after a reboot. The factory image therefore has no
+"Status LED" light entity; the hub package's light is still there for your own device files.
 
-To start again, hold the BOOT button (`SW2`) for ten seconds. The LED comes on, then the
+To start again, hold the BOOT button (`SW2`) for ten seconds. The LED flashes fast for a
+second and a half, then the
 board erases its saved settings, including any WiFi credentials, and restarts in setup mode.
 The button is the one that pulls `GPIO28` low; the RESET button (`SW1`) cannot be used for
 this because it pulls the chip's EN pin, which the firmware cannot read. Holding BOOT while

@@ -12,11 +12,16 @@
 #
 # Setup stays open for five minutes after power-up. If nobody has provisioned the board
 # by then the access point, the portal and both Improv transports close, and the status
-# LED blinks slowly. Cycle the power to open the window again.
+# LED pulses slowly. Cycle the power to open the window again.
+#
+# The status LED is ESPHome's own status_led: it pulses slowly while a component has a
+# warning (the WiFi connecting, the timeout above) and fast on an error, and is off the rest
+# of the time. It is plain output state, so nothing is saved and nothing comes back at the
+# next power-up. This image therefore has no "Status LED" light entity.
 #
 # Holding the BOOT button for ten seconds erases the saved settings, including any WiFi
 # credentials given through Improv or the portal, and restarts the board in setup mode.
-# The LED stays on for the last half second before the restart.
+# The LED blinks fast for a second and a half before the restart.
 #
 # The cell is set after setup, not at build time: the Cell Chemistry, Battery Capacity,
 # Battery Energy and Default Charge Current entities (configuration category) are kept in
@@ -69,16 +74,6 @@ ota:
 wifi:
   ap:
     ssid: "${friendly_name} Setup"
-  # The hub package restores the LED's last state, effect included, so a blink saved by a
-  # timeout comes back at the next power-up. Once the board is on a network the blink is
-  # stale: turn the LED off (which saves it as off) and leave any state the owner chose alone.
-  on_connect:
-    then:
-      - if:
-          condition:
-            lambda: 'return id(status_led).get_effect_name() == "Slow Blink";'
-          then:
-            - light.turn_off: status_led
 
 captive_portal:
 
@@ -93,28 +88,28 @@ esp32_improv:
   authorized_duration: 1min
 
 # The window is counted from power-up and only runs while the board has no network. When
-# it expires the transports above close; the LED is the only sign left.
+# it expires the transports above close; the LED is the only sign left. The warning below
+# lives in RAM, so a power cycle clears it along with reopening the window.
 provisioning:
+  id: provisioning_window
   timeout: 5min
   on_timeout:
     then:
       - logger.log:
           level: WARN
           format: "Provisioning window timed out. Cycle the power to try again."
-      - light.turn_on:
-          id: status_led
-          effect: "Slow Blink"
+      - lambda: 'id(provisioning_window).status_set_warning("provisioning window timed out");'
+
+# GPIO6 drives the LED through R3. The hub package puts a "Status LED" light on the same pin;
+# this image gives the pin to ESPHome's status LED instead.
+status_led:
+  pin: GPIO6
+
+output:
+  - id: !remove status_led_output
 
 light:
-  - id: !extend status_led
-    effects:
-      - strobe:
-          name: "Slow Blink"
-          colors:
-            - state: true
-              duration: 750ms
-            - state: false
-              duration: 750ms
+  - id: !remove status_led
 
 # SW2 pulls GPIO28 low and has a 10 kOhm pull-up on the board. GPIO28 is a boot-mode
 # strapping pin, which only matters at reset: holding the button during power-up still
@@ -153,10 +148,8 @@ script:
             - logger.log:
                 level: WARN
                 format: "BOOT held for 10 s: erasing the saved settings."
-            - light.turn_on:
-                id: status_led
-                effect: none
-            - delay: 500ms
+            - lambda: 'id(provisioning_window).status_set_error("erasing the saved settings");'
+            - delay: 1500ms
             - button.press: factory_reset_button
 
   # Only after boot: the entities publish their restored values while the board is starting,
