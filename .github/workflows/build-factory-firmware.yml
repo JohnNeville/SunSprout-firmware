@@ -1,0 +1,75 @@
+# Builds the factory image and keeps it as a downloadable artifact.
+#
+# `Validate firmware` only checks that the configurations are valid. This workflow goes
+# further: it compiles sunsprout-factory.yaml, the image a new board is flashed with, so
+# every build gives a binary to flash and walk through the setup flow (Improv over USB,
+# the "Sunsprout Setup" access point, or adopting it in the ESPHome dashboard).
+#
+# Download the artifact from the run's Summary page. It holds two files:
+#   - sunsprout-factory-<sha>.factory.bin: the full image. Write it at offset 0x0 over USB,
+#     for example `esptool.py --chip esp32c5 write_flash 0x0 <file>`.
+#   - sunsprout-factory-<sha>.ota.bin: the app only, for updating a board that is already
+#     running ESPHome.
+
+name: Build factory firmware
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-factory-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Compile the factory image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ESPHome
+        run: pip install esphome
+
+      - name: Write placeholder secrets
+        # The factory image reads no secrets, but the shared packages are validated the same
+        # way as in `Validate firmware`, so keep the file the same shape.
+        run: |
+          cat > secrets.yaml <<EOF
+          wifi_ssid: "placeholder"
+          wifi_password: "placeholder"
+          fallback_password: "placeholder"
+          api_encryption_key: "$(openssl rand -base64 32)"
+          EOF
+
+      - name: Compile
+        run: esphome compile sunsprout-factory.yaml
+
+      - name: Collect the binaries
+        id: bins
+        run: |
+          short="${GITHUB_SHA::7}"
+          out="dist"
+          mkdir -p "$out"
+          factory="$(find .esphome/build -name firmware.factory.bin | head -n 1)"
+          ota="$(find .esphome/build -name firmware.ota.bin | head -n 1)"
+          test -n "$factory" && test -n "$ota"
+          cp "$factory" "$out/sunsprout-factory-$short.factory.bin"
+          cp "$ota" "$out/sunsprout-factory-$short.ota.bin"
+          (cd "$out" && sha256sum * > SHA256SUMS)
+          ls -l "$out"
+          echo "short=$short" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sunsprout-factory-${{ steps.bins.outputs.short }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
