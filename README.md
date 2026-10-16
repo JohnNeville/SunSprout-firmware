@@ -86,15 +86,28 @@ so use a terminal that reconnects, such as `tio /dev/ttyACM0` or `esphome logs`.
 `sunsprout-factory.yaml` is for shipping a board whose owner is not you. It has no WiFi
 credentials, no API encryption key and no OTA password, and it leaves deep sleep out so an
 unconfigured board stays awake. On first boot the board starts its own access point
-(`Sunsprout Setup`) and offers three ways to join a network:
+(`Sunsprout Setup`) and offers four ways to join a network:
 
 - **Improv over USB.** Flash from a browser with ESP Web Tools and it asks for the SSID and
   password straight away (`improv_serial`).
+- **Improv over Bluetooth, from a phone.** Connect with any Improv Bluetooth client, then
+  press the BOOT button (`SW2`) within a minute. The button press authorises the change, so
+  someone in range cannot set the network on their own.
 - **Captive portal.** Join the access point and the portal opens a WiFi picker.
 - **Adopt in the ESPHome dashboard.** The `dashboard_import` entry makes the board appear as
   discovered. Adopting it writes a normal device file that pulls the factory file in as a
   package and adds secrets, so the owner can then add `sunsprout-deep-sleep.yaml`, change the
   substitutions, or anything else, without editing the factory file.
+
+Setup stays open for five minutes after power-up and only while the board has no network.
+If it is still unprovisioned then, the access point, the portal and both Improv transports
+close and the status LED blinks slowly. Cycle the power to open the window again.
+
+To start again, hold the BOOT button (`SW2`) for ten seconds. The LED comes on, then the
+board erases its saved settings, including any WiFi credentials, and restarts in setup mode.
+The button is the one that pulls `GPIO28` low; the RESET button (`SW1`) cannot be used for
+this because it pulls the chip's EN pin, which the firmware cannot read. Holding BOOT while
+the board powers up still enters the download mode as before.
 
 Build the image with `esphome compile sunsprout-factory.yaml` and flash the
 `.factory.bin` at offset `0x0`.

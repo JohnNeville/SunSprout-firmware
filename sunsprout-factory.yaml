@@ -1,12 +1,22 @@
 # Factory image: a SunSprout hub that carries no WiFi credentials.
 #
 # Flash this once and the board comes up in setup mode. The end user then gives it
-# a network in any of three ways:
+# a network in any of four ways:
 #
 #   - from a browser over USB, through the Improv prompt on the ESP Web Tools page;
+#   - from a phone over Bluetooth, with any Improv Bluetooth client: connect, then press
+#     the BOOT button (SW2) within a minute to authorise the change;
 #   - by joining the "Sunsprout Setup" access point and using the captive portal;
 #   - by adopting it in the ESPHome dashboard, which writes a normal device file that
 #     pulls this one in as a package and adds the secrets (see dashboard_import below).
+#
+# Setup stays open for five minutes after power-up. If nobody has provisioned the board
+# by then the access point, the portal and both Improv transports close, and the status
+# LED blinks slowly. Cycle the power to open the window again.
+#
+# Holding the BOOT button for ten seconds erases the saved settings, including any WiFi
+# credentials given through Improv or the portal, and restarts the board in setup mode.
+# The LED stays on for the last half second before the restart.
 #
 # It has no API encryption key and no OTA password, because those belong to whoever
 # owns the board: adopting it generates them. It does not include deep sleep, so an
@@ -49,3 +59,79 @@ wifi:
 captive_portal:
 
 improv_serial:
+
+# Bluetooth setup for phones. The BOOT button authorises a change, so a stranger in
+# range cannot set the network while the window is open.
+esp32_ble:
+
+esp32_improv:
+  authorizer: boot_button
+  authorized_duration: 1min
+
+# The window is counted from power-up and only runs while the board has no network. When
+# it expires the transports above close; the LED is the only sign left.
+provisioning:
+  timeout: 5min
+  on_timeout:
+    then:
+      - logger.log:
+          level: WARN
+          format: "Provisioning window timed out. Cycle the power to try again."
+      - light.turn_on:
+          id: status_led
+          effect: "Slow Blink"
+
+light:
+  - id: !extend status_led
+    effects:
+      - strobe:
+          name: "Slow Blink"
+          colors:
+            - state: true
+              duration: 750ms
+            - state: false
+              duration: 750ms
+
+# SW2 pulls GPIO28 low and has a 10 kOhm pull-up on the board. GPIO28 is a boot-mode
+# strapping pin, which only matters at reset: holding the button during power-up still
+# enters the download mode, as it always has.
+binary_sensor:
+  - platform: gpio
+    id: boot_button
+    internal: true
+    pin:
+      number: GPIO28
+      mode:
+        input: true
+      inverted: true
+      ignore_strapping_warning: true
+    on_press:
+      then:
+        - script.execute: hold_to_reset
+    on_release:
+      then:
+        - script.stop: hold_to_reset
+
+script:
+  - id: hold_to_reset
+    mode: restart
+    then:
+      - delay: 10s
+      - if:
+          condition:
+            binary_sensor.is_on: boot_button
+          then:
+            - logger.log:
+                level: WARN
+                format: "BOOT held for 10 s: erasing the saved settings."
+            - light.turn_on:
+                id: status_led
+                effect: none
+            - delay: 500ms
+            - button.press: factory_reset_button
+
+button:
+  - platform: factory_reset
+    id: factory_reset_button
+    name: "Restart with Factory Default Settings"
+    internal: true
