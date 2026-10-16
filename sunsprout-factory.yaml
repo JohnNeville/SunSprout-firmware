@@ -69,6 +69,16 @@ ota:
 wifi:
   ap:
     ssid: "${friendly_name} Setup"
+  # The hub package restores the LED's last state, effect included, so a blink saved by a
+  # timeout comes back at the next power-up. Once the board is on a network the blink is
+  # stale: turn the LED off (which saves it as off) and leave any state the owner chose alone.
+  on_connect:
+    then:
+      - if:
+          condition:
+            lambda: 'return id(status_led).get_effect_name() == "Slow Blink";'
+          then:
+            - light.turn_off: status_led
 
 captive_portal:
 
@@ -97,10 +107,6 @@ provisioning:
 
 light:
   - id: !extend status_led
-    # The LED is a provisioning signal, so it must not come back on after a reboot. The hub
-    # package restores the last state, which would bring the blink back at the next power-up
-    # (and after setup was done) once a timeout had saved it.
-    restore_mode: ALWAYS_OFF
     effects:
       - strobe:
           name: "Slow Blink"
