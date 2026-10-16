@@ -57,6 +57,16 @@ esphome:
             id: battery_ready
             value: "true"
         - script.execute: apply_battery
+    # A board with no battery attached leaves the fuel gauge unpowered, so it never answers and
+    # ESPHome marks it failed. A failed component raises the error flag, which makes the status
+    # LED flash fast for good. A missing battery is a normal state for a factory image, so drop
+    # that flag (the error stays in the log) and leave the LED to the provisioning signal.
+    - priority: -200
+      then:
+        - lambda: |-
+            if (id(fuel_gauge).is_failed()) {
+              id(fuel_gauge).status_clear_error();
+            }
   project:
     name: JohnNeville.SunSproutHub
     version: factory
@@ -69,6 +79,12 @@ api:
 
 ota:
   - platform: esphome
+
+# ESPHome batches flash writes and by default flushes them once a minute, so a cell setting
+# changed and then followed by a reset or an unplug inside that minute would be lost. Nothing
+# here writes often (only when a setting changes), so flush quickly.
+preferences:
+  flash_write_interval: 5s
 
 # No ssid: the board starts its own access point until credentials are saved.
 wifi:
