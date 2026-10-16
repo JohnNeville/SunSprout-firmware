@@ -24,10 +24,12 @@
 # The LED blinks fast for a second and a half before the restart.
 #
 # The cell is set after setup, not at build time: the Cell Chemistry, Battery Capacity,
-# Battery Energy and Default Charge Current entities (configuration category) are kept in
+# Battery Energy, Default Charge Current and Ignore Thermistor entities (configuration category) are kept in
 # flash and written to the charger and the fuel gauge at every boot. Until they are changed
 # the board assumes a 6000 mAh LiFePO4 cell, which charges to 3.65 V and cannot overcharge
-# a lithium-ion cell either. Choosing Li-ion raises the limit to 4.2 V.
+# a lithium-ion cell either. Choosing Li-ion raises the limit to 4.2 V. The charger also
+# expects a thermistor on the TS pin and will not charge without one; turning on Ignore
+# Thermistor lets a pack with no thermistor charge, at the cost of the temperature protection.
 #
 # It has no API encryption key and no OTA password, because those belong to whoever
 # owns the board: adopting it generates them. It does not include deep sleep, so an
@@ -152,6 +154,27 @@ globals:
     type: bool
     initial_value: "false"
 
+switch:
+  # Off by default: the charger qualifies charging against the battery temperature, which is the
+  # safe behaviour. Turn it on only for a pack with no thermistor fitted to the TS pin: with that
+  # input open the charger reads "too cold" and never charges. Turning it on removes the
+  # temperature limits, so the cell is no longer protected from charging when hot or frozen.
+  - platform: template
+    name: "Ignore Thermistor"
+    id: ts_ignore_switch
+    icon: "mdi:thermometer-off"
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    # A template switch runs these before it publishes the new state, so publish it first or
+    # the script would read the old value and apply it one toggle late.
+    turn_on_action:
+      - lambda: 'id(ts_ignore_switch).publish_state(true);'
+      - script.execute: apply_battery
+    turn_off_action:
+      - lambda: 'id(ts_ignore_switch).publish_state(false);'
+      - script.execute: apply_battery
+
 script:
   - id: hold_to_reset
     mode: restart
@@ -205,6 +228,7 @@ script:
             return id(cell_chemistry).active_index().value_or(0) == 1 ? std::string("li_ion") : std::string("lifepo4");
           battery_capacity: !lambda 'return (uint16_t) id(battery_capacity_mah).state;'
           charge_current: !lambda 'return (uint16_t) id(default_charge_current).state;'
+          ts_ignore: !lambda 'return id(ts_ignore_switch).state;'
       - bq34z100.configure_pack:
           id: fuel_gauge
           design_capacity: !lambda 'return (uint16_t) id(battery_capacity_mah).state;'
