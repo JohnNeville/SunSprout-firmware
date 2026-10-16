@@ -97,6 +97,10 @@ provisioning:
 
 light:
   - id: !extend status_led
+    # The LED is a provisioning signal, so it must not come back on after a reboot. The hub
+    # package restores the last state, which would bring the blink back at the next power-up
+    # (and after setup was done) once a timeout had saved it.
+    restore_mode: ALWAYS_OFF
     effects:
       - strobe:
           name: "Slow Blink"
