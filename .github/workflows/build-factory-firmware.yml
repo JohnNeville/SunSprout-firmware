@@ -5,11 +5,16 @@
 # every build gives a binary to flash and walk through the setup flow (Improv over USB,
 # the "Sunsprout Setup" access point, or adopting it in the ESPHome dashboard).
 #
-# Download the artifact from the run's Summary page. It holds two files:
-#   - sunsprout-factory-<sha>.factory.bin: the full image. Write it at offset 0x0 over USB,
+# Download the artifact from the run's Summary page (kept for 30 days). It holds:
+#   - sunsprout-factory-<label>.factory.bin: the full image. Write it at offset 0x0 over USB,
 #     for example `esptool.py --chip esp32c5 write_flash 0x0 <file>`.
-#   - sunsprout-factory-<sha>.ota.bin: the app only, for updating a board that is already
+#   - sunsprout-factory-<label>.ota.bin: the app only, for updating a board that is already
 #     running ESPHome.
+#   - SHA256SUMS
+# <label> is the short commit hash, or the tag name for a release.
+#
+# Publishing a release also runs this workflow and attaches the same files to the release,
+# so a released build stays downloadable after the artifact has expired.
 
 name: Build factory firmware
 
@@ -18,6 +23,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
 
 concurrency:
   group: build-factory-${{ github.ref }}
@@ -27,6 +37,8 @@ jobs:
   build:
     name: Compile the factory image
     runs-on: ubuntu-latest
+    outputs:
+      short: ${{ steps.bins.outputs.short }}
     steps:
       - uses: actions/checkout@v4
 
@@ -55,13 +67,15 @@ jobs:
         id: bins
         run: |
           short="${GITHUB_SHA::7}"
+          label="$short"
+          if [ "$GITHUB_EVENT_NAME" = "release" ]; then label="$GITHUB_REF_NAME"; fi
           out="dist"
           mkdir -p "$out"
           factory="$(find .esphome/build -name firmware.factory.bin | head -n 1)"
           ota="$(find .esphome/build -name firmware.ota.bin | head -n 1)"
           test -n "$factory" && test -n "$ota"
-          cp "$factory" "$out/sunsprout-factory-$short.factory.bin"
-          cp "$ota" "$out/sunsprout-factory-$short.ota.bin"
+          cp "$factory" "$out/sunsprout-factory-$label.factory.bin"
+          cp "$ota" "$out/sunsprout-factory-$label.ota.bin"
           (cd "$out" && sha256sum * > SHA256SUMS)
           ls -l "$out"
           echo "short=$short" >> "$GITHUB_OUTPUT"
@@ -73,3 +87,21 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 30
+
+  release:
+    name: Attach to the release
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: sunsprout-factory-${{ needs.build.outputs.short }}
+          path: dist
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber
