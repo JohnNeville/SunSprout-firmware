@@ -101,8 +101,9 @@ unconfigured board stays awake. On first boot the board starts its own access po
 
 Setup stays open for five minutes after power-up and only while the board has no network.
 If it is still unprovisioned then, the access point, the portal and both Improv transports
-close and the status LED pulses slowly. Cycle the power to open the window again. The LED is ESPHome's
-own `status_led`: it pulses slowly on a warning, flashes fast on an error and is off otherwise, and nothing
+close and the status LED flashes fast. Cycle the power to open the window again. The LED is ESPHome's
+own `status_led`: it pulses slowly on a warning (including "online, waiting for a client such as Home Assistant"),
+flashes fast on an error (including the setup timeout) and is off otherwise, and nothing
 about it is saved, so a blink never comes back after a reboot. The factory image therefore has no
 "Status LED" light entity; the hub package's light is still there for your own device files.
 
