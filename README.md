@@ -85,7 +85,13 @@ so use a terminal that reconnects, such as `tio /dev/ttyACM0` or `esphome logs`.
 
 `sunsprout-factory.yaml` is for shipping a board whose owner is not you. It has no WiFi
 credentials, no API encryption key and no OTA password, and it leaves deep sleep out so an
-unconfigured board stays awake. On first boot the board starts its own access point
+unconfigured board stays awake. The API has encryption turned on with no key: the first client
+to connect, normally Home Assistant, sets a random key, and the board keeps it. The key is only
+accepted while the five-minute setup window is open, so connect within five minutes of power-up
+(or power-cycle the board to open the window again). Until a key is set the board counts as
+unprovisioned, so a board that has WiFi but has not met Home Assistant yet will still reach the
+setup timeout and flash its LED fast. Adopting the board in the ESPHome dashboard gives it a
+key from the dashboard instead. On first boot the board starts its own access point
 (`Sunsprout Setup`) and offers four ways to join a network:
 
 - **Improv over USB.** Flash from a browser with ESP Web Tools and it asks for the SSID and
