@@ -125,7 +125,7 @@ ESPHome dashboard):
 | Battery Capacity | 6000 mAh | Sets the charge termination current (C/10) and the gauge's design capacity. |
 | Battery Energy | 19200 mWh | The gauge's design energy. Filled in from the capacity (x 3.2 V for LiFePO4, x 3.7 V for Li-ion) whenever the capacity or chemistry changes; edit it afterwards if the datasheet differs. 32767 mWh is the most the gauge can hold. |
 | Default Charge Current | 1000 mA | The charge current applied at every boot, up to the board's 2000 mA limit. "Charge Current Limit" changes the live value but is forgotten at the next reset. |
-| Ignore Thermistor | off | The charger expects a thermistor on the TS pin (`J302`) and will not charge without one, because an open TS input reads as "too cold". Turn this on for a pack with no thermistor. It turns off the charger's temperature protection, so the cell is no longer kept from charging while hot or frozen. |
+| TS Enable | Both | Which thermistors are fitted: the charger's (`J302`) and the fuel gauge's (`J401`). `Both` needs both. `Charger Only` makes the gauge use its own temperature sensor. `Gauge Only` and `None` make the charger ignore its thermistor input, so a pack with no thermistor there can charge; that turns off the charger's temperature protection, so the cell is no longer kept from charging while hot or frozen. Without the charger's thermistor the charger reads "too cold" and does not charge; without the gauge's, the gauge reads about -40 C and reports "Charge inhibited". |
 
 The values are kept in flash and written to the charger and the fuel gauge at every boot. The
 gauge compares each value with its data flash first and only writes what differs, so this does
