@@ -101,9 +101,13 @@ unconfigured board stays awake. On first boot the board starts its own access po
 
 Setup stays open for five minutes after power-up and only while the board has no network.
 If it is still unprovisioned then, the access point, the portal and both Improv transports
-close and the status LED blinks slowly. Cycle the power to open the window again.
+close and the status LED pulses slowly. Cycle the power to open the window again. The LED is ESPHome's
+own `status_led`: it pulses slowly on a warning, flashes fast on an error and is off otherwise, and nothing
+about it is saved, so a blink never comes back after a reboot. The factory image therefore has no
+"Status LED" light entity; the hub package's light is still there for your own device files.
 
-To start again, hold the BOOT button (`SW2`) for ten seconds. The LED comes on, then the
+To start again, hold the BOOT button (`SW2`) for ten seconds. The LED flashes fast for a
+second and a half, then the
 board erases its saved settings, including any WiFi credentials, and restarts in setup mode.
 The button is the one that pulls `GPIO28` low; the RESET button (`SW1`) cannot be used for
 this because it pulls the chip's EN pin, which the firmware cannot read. Holding BOOT while
@@ -112,7 +116,7 @@ the board powers up still enters the download mode as before.
 ### Setting the cell
 
 The factory image does not need a rebuild to match the cell. Once the board is on the network
-it shows four settings in the configuration section of its page in Home Assistant (or the
+it shows five settings in the configuration section of its page in Home Assistant (or the
 ESPHome dashboard):
 
 | Entity | Default | What it does |
@@ -121,6 +125,7 @@ ESPHome dashboard):
 | Battery Capacity | 6000 mAh | Sets the charge termination current (C/10) and the gauge's design capacity. |
 | Battery Energy | 19200 mWh | The gauge's design energy. Filled in from the capacity (x 3.2 V for LiFePO4, x 3.7 V for Li-ion) whenever the capacity or chemistry changes; edit it afterwards if the datasheet differs. 32767 mWh is the most the gauge can hold. |
 | Default Charge Current | 1000 mA | The charge current applied at every boot, up to the board's 2000 mA limit. "Charge Current Limit" changes the live value but is forgotten at the next reset. |
+| TS Enable | Both | Which thermistors are fitted: the charger's (`J302`) and the fuel gauge's (`J401`). `Both` needs both. `Charger Only` makes the gauge use its own temperature sensor. `Gauge Only` and `None` make the charger ignore its thermistor input, so a pack with no thermistor there can charge; that turns off the charger's temperature protection, so the cell is no longer kept from charging while hot or frozen. Without the charger's thermistor the charger reads "too cold" and does not charge; without the gauge's, the gauge reads about -40 C and reports "Charge inhibited". |
 
 The values are kept in flash and written to the charger and the fuel gauge at every boot. The
 gauge compares each value with its data flash first and only writes what differs, so this does

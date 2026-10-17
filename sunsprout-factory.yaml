@@ -12,17 +12,25 @@
 #
 # Setup stays open for five minutes after power-up. If nobody has provisioned the board
 # by then the access point, the portal and both Improv transports close, and the status
-# LED blinks slowly. Cycle the power to open the window again.
+# LED pulses slowly. Cycle the power to open the window again.
+#
+# The status LED is ESPHome's own status_led: it pulses slowly while a component has a
+# warning (the WiFi connecting, the timeout above) and fast on an error, and is off the rest
+# of the time. It is plain output state, so nothing is saved and nothing comes back at the
+# next power-up. This image therefore has no "Status LED" light entity.
 #
 # Holding the BOOT button for ten seconds erases the saved settings, including any WiFi
 # credentials given through Improv or the portal, and restarts the board in setup mode.
-# The LED stays on for the last half second before the restart.
+# The LED blinks fast for a second and a half before the restart.
 #
 # The cell is set after setup, not at build time: the Cell Chemistry, Battery Capacity,
-# Battery Energy and Default Charge Current entities (configuration category) are kept in
+# Battery Energy, Default Charge Current and TS Enable entities (configuration category) are kept in
 # flash and written to the charger and the fuel gauge at every boot. Until they are changed
 # the board assumes a 6000 mAh LiFePO4 cell, which charges to 3.65 V and cannot overcharge
-# a lithium-ion cell either. Choosing Li-ion raises the limit to 4.2 V.
+# a lithium-ion cell either. Choosing Li-ion raises the limit to 4.2 V. The charger also
+# expects a thermistor on the TS pin and will not charge without one; TS Enable says which of
+# the two thermistors (charger J302, gauge J401) are fitted, and a pack with none can charge at
+# the cost of the temperature protection.
 #
 # It has no API encryption key and no OTA password, because those belong to whoever
 # owns the board: adopting it generates them. It does not include deep sleep, so an
@@ -52,6 +60,16 @@ esphome:
             id: battery_ready
             value: "true"
         - script.execute: apply_battery
+    # A board with no battery attached leaves the fuel gauge unpowered, so it never answers and
+    # ESPHome marks it failed. A failed component raises the error flag, which makes the status
+    # LED flash fast for good. A missing battery is a normal state for a factory image, so drop
+    # that flag (the error stays in the log) and leave the LED to the provisioning signal.
+    - priority: -200
+      then:
+        - lambda: |-
+            if (id(fuel_gauge).is_failed()) {
+              id(fuel_gauge).status_clear_error();
+            }
   project:
     name: JohnNeville.SunSproutHub
     version: factory
@@ -64,6 +82,12 @@ api:
 
 ota:
   - platform: esphome
+
+# ESPHome batches flash writes and by default flushes them once a minute, so a cell setting
+# changed and then followed by a reset or an unplug inside that minute would be lost. Nothing
+# here writes often (only when a setting changes), so flush quickly.
+preferences:
+  flash_write_interval: 5s
 
 # No ssid: the board starts its own access point until credentials are saved.
 wifi:
@@ -83,28 +107,28 @@ esp32_improv:
   authorized_duration: 1min
 
 # The window is counted from power-up and only runs while the board has no network. When
-# it expires the transports above close; the LED is the only sign left.
+# it expires the transports above close; the LED is the only sign left. The warning below
+# lives in RAM, so a power cycle clears it along with reopening the window.
 provisioning:
+  id: provisioning_window
   timeout: 5min
   on_timeout:
     then:
       - logger.log:
           level: WARN
           format: "Provisioning window timed out. Cycle the power to try again."
-      - light.turn_on:
-          id: status_led
-          effect: "Slow Blink"
+      - lambda: 'id(provisioning_window).status_set_warning();'
+
+# GPIO6 drives the LED through R3. The hub package puts a "Status LED" light on the same pin;
+# this image gives the pin to ESPHome's status LED instead.
+status_led:
+  pin: GPIO6
+
+output:
+  - id: !remove status_led_output
 
 light:
-  - id: !extend status_led
-    effects:
-      - strobe:
-          name: "Slow Blink"
-          colors:
-            - state: true
-              duration: 750ms
-            - state: false
-              duration: 750ms
+  - id: !remove status_led
 
 # SW2 pulls GPIO28 low and has a 10 kOhm pull-up on the board. GPIO28 is a boot-mode
 # strapping pin, which only matters at reset: holding the button during power-up still
@@ -143,19 +167,23 @@ script:
             - logger.log:
                 level: WARN
                 format: "BOOT held for 10 s: erasing the saved settings."
-            - light.turn_on:
-                id: status_led
-                effect: none
-            - delay: 500ms
+            - lambda: 'id(provisioning_window).status_set_error();'
+            - delay: 1500ms
             - button.press: factory_reset_button
 
+  # Only after boot: the entities publish their restored values while the board is starting,
+  # and recomputing then would overwrite an energy value the owner had edited.
   - id: fill_energy
     then:
-      - lambda: |-
-          const bool lifepo4 = id(cell_chemistry).active_index().value_or(0) == 0;
-          float mwh = id(battery_capacity_mah).state * (lifepo4 ? 3.2f : 3.7f);
-          if (mwh > 32767.0f) mwh = 32767.0f;
-          id(battery_energy_mwh).make_call().set_value(mwh).perform();
+      - if:
+          condition:
+            lambda: 'return id(battery_ready);'
+          then:
+            - lambda: |-
+                const bool lifepo4 = id(cell_chemistry).active_index().value_or(0) == 0;
+                float mwh = id(battery_capacity_mah).state * (lifepo4 ? 3.2f : 3.7f);
+                if (mwh > 32767.0f) mwh = 32767.0f;
+                id(battery_energy_mwh).make_call().set_value(mwh).perform();
 
   # Writes the four values to the charger (charge voltage limit, termination current, charge
   # current) and the gauge (design capacity and energy, LFPRelax). The gauge compares each
@@ -180,11 +208,15 @@ script:
             return id(cell_chemistry).active_index().value_or(0) == 1 ? std::string("li_ion") : std::string("lifepo4");
           battery_capacity: !lambda 'return (uint16_t) id(battery_capacity_mah).state;'
           charge_current: !lambda 'return (uint16_t) id(default_charge_current).state;'
+          # Both = 0, Charger Only = 1, Gauge Only = 2, None = 3: the charger input is ignored for 2 and 3.
+          ts_ignore: !lambda 'return id(ts_enable).active_index().value_or(0) >= 2;'
       - bq34z100.configure_pack:
           id: fuel_gauge
           design_capacity: !lambda 'return (uint16_t) id(battery_capacity_mah).state;'
           design_energy: !lambda 'return (uint16_t) id(battery_energy_mwh).state;'
           lifepo4_relax: !lambda 'return id(cell_chemistry).active_index().value_or(0) == 0;'
+          # The gauge reads its own thermistor for Both and Gauge Only.
+          external_thermistor: !lambda 'return id(ts_enable).active_index().value_or(0) % 2 == 0;'
 
 button:
   - platform: factory_reset
@@ -207,6 +239,25 @@ select:
     on_value:
       then:
         - script.execute: fill_energy
+        - script.execute: apply_battery
+
+  # Which thermistors are fitted: the charger's (J302) and the fuel gauge's (J401). "Both" is the
+  # safe default and needs both fitted. Without the charger's thermistor the charger reads "too
+  # cold" and never charges; "Gauge Only" and "None" tell it to ignore that input, which removes
+  # its temperature protection (no cut-off when the cell is hot or frozen). Without the gauge's
+  # thermistor the gauge reads about -40 C and reports "Charge inhibited"; "Charger Only" and
+  # "None" make it use its own temperature sensor instead.
+  - platform: template
+    name: "TS Enable"
+    id: ts_enable
+    icon: "mdi:thermometer-check"
+    entity_category: config
+    options: ["Both", "Charger Only", "Gauge Only", "None"]
+    initial_option: "Both"
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
         - script.execute: apply_battery
 
 number:
