@@ -12,11 +12,11 @@
 #
 # Setup stays open for five minutes after power-up. If nobody has provisioned the board
 # by then the access point, the portal and both Improv transports close, and the status
-# LED pulses slowly. Cycle the power to open the window again.
+# LED flashes fast. Cycle the power to open the window again.
 #
 # The status LED is ESPHome's own status_led: it pulses slowly while a component has a
-# warning (the WiFi connecting, the timeout above) and fast on an error, and is off the rest
-# of the time. It is plain output state, so nothing is saved and nothing comes back at the
+# warning (the WiFi connecting, or no client such as Home Assistant connected yet), flashes
+# fast on an error (the timeout above, a failed component) and is off the rest of the time. It is plain output state, so nothing is saved and nothing comes back at the
 # next power-up. This image therefore has no "Status LED" light entity.
 #
 # Holding the BOOT button for ten seconds erases the saved settings, including any WiFi
@@ -117,7 +117,8 @@ provisioning:
       - logger.log:
           level: WARN
           format: "Provisioning window timed out. Cycle the power to try again."
-      - lambda: 'id(provisioning_window).status_set_warning();'
+      # An error, not a warning: a slow pulse already means "online, waiting for a client".
+      - lambda: 'id(provisioning_window).status_set_error();'
 
 # GPIO6 drives the LED through R3. The hub package puts a "Status LED" light on the same pin;
 # this image gives the pin to ESPHome's status LED instead.
