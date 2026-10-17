@@ -110,7 +110,7 @@ improv_serial:
 # range cannot set the network while the window is open.
 esp32_ble:
 
-esp32_improv:
+improv_ble:
   authorizer: boot_button
   authorized_duration: 1min
 
