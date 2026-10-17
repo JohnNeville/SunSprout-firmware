@@ -32,8 +32,9 @@
 # the two thermistors (charger J302, gauge J401) are fitted, and a pack with none can charge at
 # the cost of the temperature protection.
 #
-# It has no API encryption key and no OTA password, because those belong to whoever
-# owns the board: adopting it generates them. It does not include deep sleep, so an
+# It carries no API encryption key and no OTA password, because those belong to whoever
+# owns the board: Home Assistant sets the key on first connection, or adopting it in the
+# dashboard generates one. It does not include deep sleep, so an
 # unconfigured board stays awake long enough to be set up.
 
 substitutions:
@@ -78,7 +79,14 @@ dashboard_import:
   package_import_url: github://JohnNeville/SunSprout-firmware/sunsprout-factory.yaml@main
   import_full_config: false
 
+# Encryption is on but has no key. The board starts without one and the first client to
+# connect, normally Home Assistant, sets a random key over an encrypted channel; the board
+# keeps it in flash. The key is only accepted while the five-minute setup window is open, so the
+# client has to connect within that time of power-up. Until a key is set the API counts as
+# unprovisioned, so a board that has WiFi but has never met Home Assistant will still reach the
+# timeout above. A board adopted in the ESPHome dashboard gets a key from the dashboard instead.
 api:
+  encryption:
 
 ota:
   - platform: esphome
