@@ -110,6 +110,12 @@ bq25798:
   # ceiling below is what guards the copper.
   battery_ocp: true
 
+  # Re-writes the settings this firmware owns if the charger's registers drift, and clears
+  # the charger's input lockout (EN_HIZ) every 30 s so a panel that rises slowly at dawn
+  # is retried sooner than the charger's own retry (about 10 minutes). The counter below
+  # shows how often it had to act. "watch" only logs; "off" disables the check.
+  register_check: enforce
+
   # Disabled: a watchdog expiry would silently revert the charge voltage to
   # the PROG default of 4.2 V, which would damage a LiFePO4 cell.
   watchdog: disabled
@@ -153,6 +159,9 @@ bq25798:
   die_temperature:
     name: "Charger Temperature"
     disabled_by_default: true
+  register_corrections:
+    name: "Register Corrections"
+    entity_category: diagnostic
 
   vbus_present:
     name: "Input Present"
