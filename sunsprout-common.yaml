@@ -11,16 +11,6 @@
 
 esphome:
   on_boot:
-    # Switch the user 3V3 rail on before the I2C buses are set up (priority 1000). Waking from deep
-    # sleep, the rail has been off, so the user bus lines sit low through the pull-ups; a bus
-    # initialised in that state left the ADS1115 and the 1-Wire bridge unreadable for the whole boot.
-    # The chips on the rail answer about 14 ms after it comes on, so 50 ms is a comfortable wait.
-    - priority: 1100
-      then:
-        - lambda: |-
-            gpio_set_direction(GPIO_NUM_23, GPIO_MODE_OUTPUT);   // EN_3V3_USER
-            gpio_set_level(GPIO_NUM_23, 1);
-            delay(50);
     # After the charger and gauge have set themselves up.
     - priority: 500
       then:
@@ -29,9 +19,10 @@ esphome:
             tag: setup
 
 switch:
-  # The rail is on at every boot (the line above sets it early; this keeps the switch's own
-  # setup from switching it off again). Turn it off from Home Assistant to save power; it
-  # comes back on at the next boot, including after deep sleep.
+  # The rail is on at every boot, including after deep sleep, and comes on when the switch is
+  # set up, before the user I2C bus (see sunsprout-hub.yaml). Turning it off from Home Assistant
+  # saves power until the next boot. ALWAYS_ON rather than a restored state, because the
+  # deep-sleep package turns the rail off before sleeping and a restored "off" would keep it off.
   - id: !extend user_rail
     restore_mode: ALWAYS_ON
 
