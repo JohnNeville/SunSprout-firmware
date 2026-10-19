@@ -77,7 +77,9 @@ i2c:
     # Set up after the rail switch (800) so the rail is already on: a bus set up while the
     # rail is off, as after deep sleep, left the chips on it unreadable for the whole boot.
     # The internal bus keeps the default priority, because the charger and gauge are
-    # always powered.
+    # always powered. A component on this bus that sets up before 700 by default, such as the
+    # DS2484 1-Wire bridge (priority 999), needs a setup_priority below 700 of its own, and
+    # a Dallas sensor on it one below that.
     setup_priority: 700
 
 # --- Charger ---------------------------------------------------------------
