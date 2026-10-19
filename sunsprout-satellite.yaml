@@ -1,9 +1,9 @@
 # One SunSprout Satellite on the hub's user I2C bus, as its own Home Assistant device.
 #
-# A satellite carries an ADS1115 (four analog inputs, for soil moisture probes and similar) and a DS2482
-# 1-Wire bridge (a DS18B20 soil temperature probe). This package adds both chips, the temperature
-# sensor and the four input voltages, all under one Home Assistant device named after the satellite.
-# Include it once per satellite, with variables:
+# A satellite reads up to four capacitive soil moisture probes (an ADS1115) and a DS18B20 soil temperature
+# probe (a DS2482 1-Wire bridge). This package adds both chips, a moisture percentage and a voltage for
+# each of the four inputs, and the soil temperature, all under one Home Assistant device named after the
+# satellite. Include it once per satellite, with variables:
 #
 #   packages:
 #     sat1: !include
@@ -24,14 +24,22 @@
 #         - path: sunsprout-satellite.yaml
 #           vars: {id: sat1, name: "Satellite 1", ads_address: 0x48, ds_address: 0x18}
 #
-# The four ADS1115 voltages (`<id>_ch1_voltage` to `<id>_ch4_voltage`) are in Home Assistant but turned off;
-# enable the ones with a probe on them. They are plain voltages: turning one into a moisture percentage
-# depends on the probe, so do it in your device file (see example-satellites.yaml).
+# Moisture: each input's voltage is turned into 0 to 100 % between the voltage of the probe in air
+# (`soil_dry_voltage`, 0 %) and in water (`soil_wet_voltage`, 100 %). The defaults are a typical
+# capacitive probe; set both in your device file's `substitutions:` from your own probes. A reading well
+# outside that range, such as an input with no probe connected, is reported as unavailable rather
+# than as dry or wet.
+#
+# The voltages are hidden in Home Assistant by default; the percentages are on.
 #
 # Needs sunsprout-hub.yaml and sunsprout-common.yaml (the `bus_user` bus and the rail). Setup order
 # matters on the user bus: the hub sets the bus up at priority 700, after the rail comes on, and the
 # DS2484 1-Wire bridge would set up at 999 by default, before both, so it is given 500 here and the
 # Dallas sensor 450.
+
+substitutions:
+  soil_dry_voltage: "2.43"
+  soil_wet_voltage: "1.12"
 
 esphome:
   devices:
@@ -54,7 +62,7 @@ one_wire:
 sensor:
   - platform: dallas_temp
     one_wire_id: ${id}_onewire
-    name: "1-Wire Temperature"
+    name: "Soil Temperature"
     device_id: ${id}
     setup_priority: 450
     update_interval: 30s
@@ -63,8 +71,8 @@ sensor:
     ads1115_id: ${id}_ads
     multiplexer: A0_GND
     gain: 4.096
-    name: "Input 1 Voltage"
-    id: ${id}_ch1_voltage
+    name: "Soil Moisture 1 Voltage"
+    id: ${id}_moisture1_voltage
     device_id: ${id}
     unit_of_measurement: "V"
     device_class: voltage
@@ -73,12 +81,34 @@ sensor:
     entity_category: diagnostic
     disabled_by_default: true
     update_interval: 30s
+  - platform: copy
+    source_id: ${id}_moisture1_voltage
+    name: "Soil Moisture 1"
+    id: ${id}_moisture1
+    device_id: ${id}
+    unit_of_measurement: "%"
+    device_class: moisture
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: ""
+    filters:
+      # No probe on the input (or a broken lead): well outside the probe's range, so unavailable.
+      - lambda: |-
+          if (x < ${soil_wet_voltage} - 0.3f || x > ${soil_dry_voltage} + 0.5f) return NAN;
+          return x;
+      - calibrate_linear:
+          - ${soil_dry_voltage} -> 0
+          - ${soil_wet_voltage} -> 100
+      - clamp:
+          min_value: 0
+          max_value: 100
+
   - platform: ads1115
     ads1115_id: ${id}_ads
     multiplexer: A1_GND
     gain: 4.096
-    name: "Input 2 Voltage"
-    id: ${id}_ch2_voltage
+    name: "Soil Moisture 2 Voltage"
+    id: ${id}_moisture2_voltage
     device_id: ${id}
     unit_of_measurement: "V"
     device_class: voltage
@@ -87,12 +117,34 @@ sensor:
     entity_category: diagnostic
     disabled_by_default: true
     update_interval: 30s
+  - platform: copy
+    source_id: ${id}_moisture2_voltage
+    name: "Soil Moisture 2"
+    id: ${id}_moisture2
+    device_id: ${id}
+    unit_of_measurement: "%"
+    device_class: moisture
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: ""
+    filters:
+      # No probe on the input (or a broken lead): well outside the probe's range, so unavailable.
+      - lambda: |-
+          if (x < ${soil_wet_voltage} - 0.3f || x > ${soil_dry_voltage} + 0.5f) return NAN;
+          return x;
+      - calibrate_linear:
+          - ${soil_dry_voltage} -> 0
+          - ${soil_wet_voltage} -> 100
+      - clamp:
+          min_value: 0
+          max_value: 100
+
   - platform: ads1115
     ads1115_id: ${id}_ads
     multiplexer: A2_GND
     gain: 4.096
-    name: "Input 3 Voltage"
-    id: ${id}_ch3_voltage
+    name: "Soil Moisture 3 Voltage"
+    id: ${id}_moisture3_voltage
     device_id: ${id}
     unit_of_measurement: "V"
     device_class: voltage
@@ -101,12 +153,34 @@ sensor:
     entity_category: diagnostic
     disabled_by_default: true
     update_interval: 30s
+  - platform: copy
+    source_id: ${id}_moisture3_voltage
+    name: "Soil Moisture 3"
+    id: ${id}_moisture3
+    device_id: ${id}
+    unit_of_measurement: "%"
+    device_class: moisture
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: ""
+    filters:
+      # No probe on the input (or a broken lead): well outside the probe's range, so unavailable.
+      - lambda: |-
+          if (x < ${soil_wet_voltage} - 0.3f || x > ${soil_dry_voltage} + 0.5f) return NAN;
+          return x;
+      - calibrate_linear:
+          - ${soil_dry_voltage} -> 0
+          - ${soil_wet_voltage} -> 100
+      - clamp:
+          min_value: 0
+          max_value: 100
+
   - platform: ads1115
     ads1115_id: ${id}_ads
     multiplexer: A3_GND
     gain: 4.096
-    name: "Input 4 Voltage"
-    id: ${id}_ch4_voltage
+    name: "Soil Moisture 4 Voltage"
+    id: ${id}_moisture4_voltage
     device_id: ${id}
     unit_of_measurement: "V"
     device_class: voltage
@@ -115,3 +189,24 @@ sensor:
     entity_category: diagnostic
     disabled_by_default: true
     update_interval: 30s
+  - platform: copy
+    source_id: ${id}_moisture4_voltage
+    name: "Soil Moisture 4"
+    id: ${id}_moisture4
+    device_id: ${id}
+    unit_of_measurement: "%"
+    device_class: moisture
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: ""
+    filters:
+      # No probe on the input (or a broken lead): well outside the probe's range, so unavailable.
+      - lambda: |-
+          if (x < ${soil_wet_voltage} - 0.3f || x > ${soil_dry_voltage} + 0.5f) return NAN;
+          return x;
+      - calibrate_linear:
+          - ${soil_dry_voltage} -> 0
+          - ${soil_wet_voltage} -> 100
+      - clamp:
+          min_value: 0
+          max_value: 100

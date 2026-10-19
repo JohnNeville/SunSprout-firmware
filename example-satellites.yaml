@@ -1,12 +1,11 @@
 # A hub with two satellites: example-device.yaml plus one sunsprout-satellite.yaml per satellite.
 #
-# Satellite 2 has its address jumpers changed (ADS1115 0x4A, DS2482 0x1A) so both can share the bus,
-# and two soil moisture probes on inputs 2 and 3, turned into a percentage here because the dry and
-# wet voltages depend on the probe: replace them with the readings of yours in air and in water.
+# Satellite 2 has its address jumpers changed (ADS1115 0x4A, DS2482 0x1A) so both can share the bus.
+# Replace the two voltages below with the readings of your own probes in air and in water.
 
 substitutions:
-  soil_dry_voltage: "2.4"
-  soil_wet_voltage: "1.1"
+  soil_dry_voltage: "2.43"
+  soil_wet_voltage: "1.12"
 
 packages:
   device: !include example-device.yaml
@@ -24,40 +23,3 @@ packages:
       name: "Satellite 2"
       ads_address: 0x4A
       ds_address: 0x1A
-
-sensor:
-  # The two inputs with a probe are turned on, then converted to a moisture percentage.
-  - id: !extend sat2_ch2_voltage
-    disabled_by_default: false
-  - id: !extend sat2_ch3_voltage
-    disabled_by_default: false
-  - platform: copy
-    source_id: sat2_ch2_voltage
-    name: "Soil Moisture 1"
-    device_id: sat2
-    unit_of_measurement: "%"
-    device_class: moisture
-    accuracy_decimals: 0
-    entity_category: ""
-    filters:
-      - calibrate_linear:
-          - ${soil_dry_voltage} -> 0
-          - ${soil_wet_voltage} -> 100
-      - clamp:
-          min_value: 0
-          max_value: 100
-  - platform: copy
-    source_id: sat2_ch3_voltage
-    name: "Soil Moisture 2"
-    device_id: sat2
-    unit_of_measurement: "%"
-    device_class: moisture
-    accuracy_decimals: 0
-    entity_category: ""
-    filters:
-      - calibrate_linear:
-          - ${soil_dry_voltage} -> 0
-          - ${soil_wet_voltage} -> 100
-      - clamp:
-          min_value: 0
-          max_value: 100

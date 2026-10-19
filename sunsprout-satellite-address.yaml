@@ -1,0 +1,53 @@
+# Lets the owner pick one satellite's I2C addresses from Home Assistant, applied at the next boot.
+#
+# Add it next to sunsprout-satellite.yaml, with the same `id` and the addresses the satellite uses until
+# someone changes them:
+#
+#   packages:
+#     sat1: !include
+#       file: sunsprout-satellite.yaml
+#       vars: {id: sat1, name: "Satellite 1", ads_address: 0x48, ds_address: 0x18}
+#     sat1_address: !include
+#       file: sunsprout-satellite-address.yaml
+#       vars: {id: sat1, name: "Satellite 1", ads_default: "0x48", ds_default: "0x18"}
+#
+# Two selects appear on the satellite's device (configuration category): the ADS1115 address
+# (0x48 to 0x4B, set by its ADDR pin) and the DS2482 address (0x18 to 0x1B, set by AD0 and AD1).
+# They are kept in flash. An ESPHome I2C address is normally fixed at build time; here the saved
+# choice is read early in boot and handed to the two chips before they set up, so a change takes effect
+# at the next boot or wake. Power Cycle Board applies it at once.
+#
+# Setup order: the selects (650) restore their saved choice, the hook below (640) copies it into the
+# chips, and the chips set up after (the 1-Wire bridge at 500, the ADS1115 at 600).
+
+select:
+  - platform: template
+    name: "ADS1115 Address"
+    id: ${id}_ads_address
+    device_id: ${id}
+    icon: "mdi:identifier"
+    entity_category: config
+    options: ["0x48", "0x49", "0x4A", "0x4B"]
+    initial_option: "${ads_default}"
+    optimistic: true
+    restore_value: true
+    setup_priority: 650
+  - platform: template
+    name: "DS2482 Address"
+    id: ${id}_ds_address
+    device_id: ${id}
+    icon: "mdi:identifier"
+    entity_category: config
+    options: ["0x18", "0x19", "0x1A", "0x1B"]
+    initial_option: "${ds_default}"
+    optimistic: true
+    restore_value: true
+    setup_priority: 650
+
+esphome:
+  on_boot:
+    - priority: 640
+      then:
+        - lambda: |-
+            id(${id}_ads).set_i2c_address(0x48 + id(${id}_ads_address).active_index().value_or(${ads_default} - 0x48));
+            id(${id}_onewire).set_i2c_address(0x18 + id(${id}_ds_address).active_index().value_or(${ds_default} - 0x18));

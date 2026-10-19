@@ -51,7 +51,9 @@ jobs:
         run: esphome config sunsprout-factory.yaml
 
       - name: Validate the satellite package
-        run: esphome config example-satellites.yaml
+        run: |
+          esphome config example-satellites.yaml
+          esphome config sunsprout-factory-satellites.yaml
 
       - name: Validate the test images
         run: |
