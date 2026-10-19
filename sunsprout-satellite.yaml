@@ -92,16 +92,14 @@ sensor:
     accuracy_decimals: 0
     entity_category: ""
     filters:
-      # No probe on the input (or a broken lead): well outside the probe's range, so unavailable.
+      # 0 % at the dry voltage, 100 % at the wet one. A voltage well outside that range, such as an input
+      # with no probe connected, is unavailable rather than dry or wet. (Done in one step because the
+      # clamp filter turns a NaN into its minimum.)
       - lambda: |-
-          if (x < ${soil_wet_voltage} - 0.3f || x > ${soil_dry_voltage} + 0.5f) return NAN;
-          return x;
-      - calibrate_linear:
-          - ${soil_dry_voltage} -> 0
-          - ${soil_wet_voltage} -> 100
-      - clamp:
-          min_value: 0
-          max_value: 100
+          const float dry = ${soil_dry_voltage}, wet = ${soil_wet_voltage};
+          if (x < wet - 0.3f || x > dry + 0.5f) return NAN;
+          float pct = (x - dry) / (wet - dry) * 100.0f;
+          return pct < 0.0f ? 0.0f : (pct > 100.0f ? 100.0f : pct);
 
   - platform: ads1115
     ads1115_id: ${id}_ads
@@ -128,16 +126,14 @@ sensor:
     accuracy_decimals: 0
     entity_category: ""
     filters:
-      # No probe on the input (or a broken lead): well outside the probe's range, so unavailable.
+      # 0 % at the dry voltage, 100 % at the wet one. A voltage well outside that range, such as an input
+      # with no probe connected, is unavailable rather than dry or wet. (Done in one step because the
+      # clamp filter turns a NaN into its minimum.)
       - lambda: |-
-          if (x < ${soil_wet_voltage} - 0.3f || x > ${soil_dry_voltage} + 0.5f) return NAN;
-          return x;
-      - calibrate_linear:
-          - ${soil_dry_voltage} -> 0
-          - ${soil_wet_voltage} -> 100
-      - clamp:
-          min_value: 0
-          max_value: 100
+          const float dry = ${soil_dry_voltage}, wet = ${soil_wet_voltage};
+          if (x < wet - 0.3f || x > dry + 0.5f) return NAN;
+          float pct = (x - dry) / (wet - dry) * 100.0f;
+          return pct < 0.0f ? 0.0f : (pct > 100.0f ? 100.0f : pct);
 
   - platform: ads1115
     ads1115_id: ${id}_ads
@@ -164,16 +160,14 @@ sensor:
     accuracy_decimals: 0
     entity_category: ""
     filters:
-      # No probe on the input (or a broken lead): well outside the probe's range, so unavailable.
+      # 0 % at the dry voltage, 100 % at the wet one. A voltage well outside that range, such as an input
+      # with no probe connected, is unavailable rather than dry or wet. (Done in one step because the
+      # clamp filter turns a NaN into its minimum.)
       - lambda: |-
-          if (x < ${soil_wet_voltage} - 0.3f || x > ${soil_dry_voltage} + 0.5f) return NAN;
-          return x;
-      - calibrate_linear:
-          - ${soil_dry_voltage} -> 0
-          - ${soil_wet_voltage} -> 100
-      - clamp:
-          min_value: 0
-          max_value: 100
+          const float dry = ${soil_dry_voltage}, wet = ${soil_wet_voltage};
+          if (x < wet - 0.3f || x > dry + 0.5f) return NAN;
+          float pct = (x - dry) / (wet - dry) * 100.0f;
+          return pct < 0.0f ? 0.0f : (pct > 100.0f ? 100.0f : pct);
 
   - platform: ads1115
     ads1115_id: ${id}_ads
@@ -200,13 +194,11 @@ sensor:
     accuracy_decimals: 0
     entity_category: ""
     filters:
-      # No probe on the input (or a broken lead): well outside the probe's range, so unavailable.
+      # 0 % at the dry voltage, 100 % at the wet one. A voltage well outside that range, such as an input
+      # with no probe connected, is unavailable rather than dry or wet. (Done in one step because the
+      # clamp filter turns a NaN into its minimum.)
       - lambda: |-
-          if (x < ${soil_wet_voltage} - 0.3f || x > ${soil_dry_voltage} + 0.5f) return NAN;
-          return x;
-      - calibrate_linear:
-          - ${soil_dry_voltage} -> 0
-          - ${soil_wet_voltage} -> 100
-      - clamp:
-          min_value: 0
-          max_value: 100
+          const float dry = ${soil_dry_voltage}, wet = ${soil_wet_voltage};
+          if (x < wet - 0.3f || x > dry + 0.5f) return NAN;
+          float pct = (x - dry) / (wet - dry) * 100.0f;
+          return pct < 0.0f ? 0.0f : (pct > 100.0f ? 100.0f : pct);
