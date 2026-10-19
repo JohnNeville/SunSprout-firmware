@@ -14,10 +14,17 @@ esphome:
     # After the charger and gauge have set themselves up.
     - priority: 500
       then:
-        - switch.turn_on: user_rail
         - logger.log:
             format: "User 3V3 rail enabled."
             tag: setup
+
+switch:
+  # The rail is on at every boot, including after deep sleep, and comes on when the switch is
+  # set up, before the user I2C bus (see sunsprout-hub.yaml). Turning it off from Home Assistant
+  # saves power until the next boot. ALWAYS_ON rather than a restored state, because the
+  # deep-sleep package turns the rail off before sleeping and a restored "off" would keep it off.
+  - id: !extend user_rail
+    restore_mode: ALWAYS_ON
 
 # The board's UART0 pins are only test points; the USB-C port is the way to read logs.
 logger:

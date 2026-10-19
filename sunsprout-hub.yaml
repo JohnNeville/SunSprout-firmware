@@ -74,6 +74,11 @@ i2c:
     sda: GPIO9      # SDA_USER
     scl: GPIO10     # SCL_USER
     scan: false
+    # Set up after the rail switch (800) so the rail is already on: a bus set up while the
+    # rail is off, as after deep sleep, left the chips on it unreadable for the whole boot.
+    # The internal bus keeps the default priority, because the charger and gauge are
+    # always powered.
+    setup_priority: 700
 
 # --- Charger ---------------------------------------------------------------
 bq25798:
