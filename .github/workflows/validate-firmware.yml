@@ -50,10 +50,10 @@ jobs:
       - name: Validate the factory image
         run: esphome config sunsprout-factory.yaml
 
-      - name: Validate the test images
+      - name: Validate the satellite package
         run: |
-          esphome config battery-burn-test.yaml
-          esphome config fg-alert-test.yaml
+          esphome config example-satellites.yaml
+          esphome config sunsprout-factory-satellites.yaml
 
       - name: Validate a standard lithium-ion build
         # The substitutions documented in README.md must keep building.

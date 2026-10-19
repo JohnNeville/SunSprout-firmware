@@ -21,8 +21,10 @@ Pin `@main` to a release tag such as `@hub-rev-a` to stay on a version that matc
 | `sunsprout-deep-sleep.yaml` | Optional deep sleep for battery or solar hubs. Leave it out while setting a board up. |
 | `example-device.yaml` | A complete device: the three packages above plus a name, WiFi, the Home Assistant API and OTA, all from `secrets.yaml`. Copy this to make your own. |
 | `sunsprout-factory.yaml` | A factory image with no credentials. It starts in setup mode so the end user supplies the WiFi. |
-| `battery-burn-test.yaml` | Test image: drains a cell to a cutoff voltage, then deep-sleeps so the radio stops draining it. |
-| `fg-alert-test.yaml` | Test image: does the fuel gauge pull `FG_ALERT` low, and does that wake the board from deep sleep. |
+| `sunsprout-satellite.yaml` | One SunSprout Satellite on the user bus, as its own Home Assistant device: four soil moisture percentages (and voltages), and a soil temperature. Include it once per satellite with `vars`. |
+| `sunsprout-satellite-address.yaml` | Optional: two selects on a satellite's device to choose its ADS1115 and DS2482 I2C addresses from Home Assistant, applied at the next boot. |
+| `example-satellites.yaml` | `example-device.yaml` plus two satellites, one with its address jumpers changed. |
+| `sunsprout-factory-satellites.yaml` | The factory image plus two satellites, with the I2C addresses chosen from Home Assistant. |
 
 The two chip drivers live in a separate repository,
 [esphome-bq-drivers](https://github.com/JohnNeville/esphome-bq-drivers), because they are
