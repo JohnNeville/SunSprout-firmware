@@ -245,6 +245,14 @@ safe. Do not raise it.
 current to the `PROG` defaults when it expires — which for the voltage means 4.2 V. The
 board package disables it.
 
+**The charger's registers are checked and corrected.** `register_check: enforce` re-reads the
+charger every 5 s, rewrites any setting this firmware owns that has drifted, and clears the
+input lockout (`EN_HIZ`) at most every 30 s. The charger sets that lockout when a source rises
+too slowly or is too weak, as a solar panel does at dawn, and on its own retries only about every
+10 minutes. The **Register Corrections** diagnostic counts how often the firmware had to act.
+A source that cannot supply roughly 15 to 20 mA is refused whatever the firmware does. Set
+`register_check: watch` to log without writing.
+
 **`ship_fet_present: true` is what makes the reboot button work.** `Q3` is the ship FET on
 `SDRV`. The charger locks `SDRV_CTRL` — and `EN_BATOC` — at 0 until `SFET_PRESENT` is set,
 so without this flag the ship-mode and power-cycle controls exist but do nothing. The
