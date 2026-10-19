@@ -1,6 +1,7 @@
 # A hub with two satellites: example-device.yaml plus one sunsprout-satellite.yaml per satellite.
 #
-# Satellite 2 has its address jumpers changed (ADS1115 0x4A, DS2482 0x1A) so both can share the bus.
+# Satellite 2 has its address jumpers changed (ADS1115 0x49, ADDR tied to 3V3; DS2482 0x1A) so both can share
+# the bus. 0x49 also stays clear of 0x4A, the default address of the DFRobot SEN0390 light sensor.
 # Replace the two voltages below with the readings of your own probes in air and in water.
 
 substitutions:
@@ -21,5 +22,5 @@ packages:
     vars:
       id: sat2
       name: "Satellite 2"
-      ads_address: 0x4A
+      ads_address: 0x49
       ds_address: 0x1A

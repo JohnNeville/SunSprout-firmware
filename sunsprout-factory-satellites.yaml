@@ -3,7 +3,7 @@
 # sunsprout-factory.yaml (credentials and cell settings chosen after setup) plus two satellites as their
 # own Home Assistant devices, each with its ADS1115 and DS2482 addresses chosen from Home Assistant.
 # The defaults are satellite 1 at the factory addresses (ADS1115 0x48, DS2482 0x18) and satellite 2 with
-# the address jumpers changed (0x4A, 0x1A). Change the selects on a satellite's device and power cycle.
+# the address jumpers changed (ADS1115 0x49, with its ADDR pin tied to 3V3, and DS2482 0x1A). Change the selects on a satellite's device and power cycle.
 
 packages:
   factory: !include sunsprout-factory.yaml
@@ -15,7 +15,7 @@ packages:
     vars: {id: sat1, name: "Satellite 1", ads_default: "0x48", ds_default: "0x18"}
   sat2: !include
     file: sunsprout-satellite.yaml
-    vars: {id: sat2, name: "Satellite 2", ads_address: 0x4A, ds_address: 0x1A}
+    vars: {id: sat2, name: "Satellite 2", ads_address: 0x49, ds_address: 0x1A}
   sat2_address: !include
     file: sunsprout-satellite-address.yaml
-    vars: {id: sat2, name: "Satellite 2", ads_default: "0x4A", ds_default: "0x1A"}
+    vars: {id: sat2, name: "Satellite 2", ads_default: "0x49", ds_default: "0x1A"}
