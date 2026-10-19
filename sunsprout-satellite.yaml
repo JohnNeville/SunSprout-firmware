@@ -1,0 +1,116 @@
+# One SunSprout Satellite on the hub's user I2C bus, as its own Home Assistant device.
+#
+# A satellite carries an ADS1115 (four analog inputs, for soil moisture probes and similar) and a DS2482
+# 1-Wire bridge (a DS18B20 soil temperature probe). This package adds both chips, the temperature
+# sensor and the four input voltages, all under one Home Assistant device named after the satellite.
+# Include it once per satellite, with variables:
+#
+#   packages:
+#     sat1: !include
+#       file: sunsprout-satellite.yaml
+#       vars:
+#         id: sat1                   # a unique short name; used to build the entity ids
+#         name: "Satellite 1"        # the Home Assistant device name
+#         ads_address: 0x48          # ADS1115 address (0x48 default; the board's jumpers change it)
+#         ds_address: 0x18           # DS2482 address (0x18 default; the board's jumpers change it)
+#
+# From a remote copy of the package, use the dictionary form of a package:
+#
+#   packages:
+#     sat1:
+#       url: https://github.com/JohnNeville/SunSprout-firmware
+#       files: [sunsprout-satellite.yaml]
+#       ref: main
+#       vars: {id: sat1, name: "Satellite 1", ads_address: 0x48, ds_address: 0x18}
+#
+# The four ADS1115 voltages (`<id>_ch1_voltage` to `<id>_ch4_voltage`) are in Home Assistant but turned off;
+# enable the ones with a probe on them. They are plain voltages: turning one into a moisture percentage
+# depends on the probe, so do it in your device file (see example-satellites.yaml).
+#
+# Needs sunsprout-hub.yaml and sunsprout-common.yaml (the `bus_user` bus and the rail). Setup order
+# matters on the user bus: the hub sets the bus up at priority 700, after the rail comes on, and the
+# DS2484 1-Wire bridge would set up at 999 by default, before both, so it is given 500 here and the
+# Dallas sensor 450.
+
+esphome:
+  devices:
+    - id: ${id}
+      name: "${name}"
+
+ads1115:
+  - id: ${id}_ads
+    i2c_id: bus_user
+    address: ${ads_address}
+
+one_wire:
+  - platform: ds2484
+    id: ${id}_onewire
+    i2c_id: bus_user
+    address: ${ds_address}
+    active_pullup: true
+    setup_priority: 500
+
+sensor:
+  - platform: dallas_temp
+    one_wire_id: ${id}_onewire
+    name: "1-Wire Temperature"
+    device_id: ${id}
+    setup_priority: 450
+    update_interval: 30s
+
+  - platform: ads1115
+    ads1115_id: ${id}_ads
+    multiplexer: A0_GND
+    gain: 4.096
+    name: "Input 1 Voltage"
+    id: ${id}_ch1_voltage
+    device_id: ${id}
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 3
+    entity_category: diagnostic
+    disabled_by_default: true
+    update_interval: 30s
+  - platform: ads1115
+    ads1115_id: ${id}_ads
+    multiplexer: A1_GND
+    gain: 4.096
+    name: "Input 2 Voltage"
+    id: ${id}_ch2_voltage
+    device_id: ${id}
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 3
+    entity_category: diagnostic
+    disabled_by_default: true
+    update_interval: 30s
+  - platform: ads1115
+    ads1115_id: ${id}_ads
+    multiplexer: A2_GND
+    gain: 4.096
+    name: "Input 3 Voltage"
+    id: ${id}_ch3_voltage
+    device_id: ${id}
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 3
+    entity_category: diagnostic
+    disabled_by_default: true
+    update_interval: 30s
+  - platform: ads1115
+    ads1115_id: ${id}_ads
+    multiplexer: A3_GND
+    gain: 4.096
+    name: "Input 4 Voltage"
+    id: ${id}_ch4_voltage
+    device_id: ${id}
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 3
+    entity_category: diagnostic
+    disabled_by_default: true
+    update_interval: 30s

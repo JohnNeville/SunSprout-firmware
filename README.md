@@ -21,6 +21,8 @@ Pin `@main` to a release tag such as `@hub-rev-a` to stay on a version that matc
 | `sunsprout-deep-sleep.yaml` | Optional deep sleep for battery or solar hubs. Leave it out while setting a board up. |
 | `example-device.yaml` | A complete device: the three packages above plus a name, WiFi, the Home Assistant API and OTA, all from `secrets.yaml`. Copy this to make your own. |
 | `sunsprout-factory.yaml` | A factory image with no credentials. It starts in setup mode so the end user supplies the WiFi. |
+| `sunsprout-satellite.yaml` | One SunSprout Satellite on the user bus, as its own Home Assistant device: the ADS1115, the DS2482 1-Wire bridge, a DS18B20 temperature sensor and the four input voltages. Include it once per satellite with `vars`. |
+| `example-satellites.yaml` | `example-device.yaml` plus two satellites, one with its address jumpers changed, and soil moisture percentages from two of the inputs. |
 | `battery-burn-test.yaml` | Test image: drains a cell to a cutoff voltage, then deep-sleeps so the radio stops draining it. |
 | `fg-alert-test.yaml` | Test image: does the fuel gauge pull `FG_ALERT` low, and does that wake the board from deep sleep. |
 

@@ -50,6 +50,9 @@ jobs:
       - name: Validate the factory image
         run: esphome config sunsprout-factory.yaml
 
+      - name: Validate the satellite package
+        run: esphome config example-satellites.yaml
+
       - name: Validate the test images
         run: |
           esphome config battery-burn-test.yaml
