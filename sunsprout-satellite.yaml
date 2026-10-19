@@ -14,14 +14,15 @@
 #         ads_address: 0x48          # ADS1115 address (0x48 default; the board's jumpers change it)
 #         ds_address: 0x18           # DS2482 address (0x18 default; the board's jumpers change it)
 #
-# From a remote copy of the package, use the dictionary form of a package:
+# From a remote copy of the package, put the variables on the file entry:
 #
 #   packages:
 #     sat1:
 #       url: https://github.com/JohnNeville/SunSprout-firmware
-#       files: [sunsprout-satellite.yaml]
 #       ref: main
-#       vars: {id: sat1, name: "Satellite 1", ads_address: 0x48, ds_address: 0x18}
+#       files:
+#         - path: sunsprout-satellite.yaml
+#           vars: {id: sat1, name: "Satellite 1", ads_address: 0x48, ds_address: 0x18}
 #
 # The four ADS1115 voltages (`<id>_ch1_voltage` to `<id>_ch4_voltage`) are in Home Assistant but turned off;
 # enable the ones with a probe on them. They are plain voltages: turning one into a moisture percentage
