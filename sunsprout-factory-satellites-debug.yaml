@@ -1,0 +1,56 @@
+# The factory image with two satellites plus the debug additions (sunsprout-debug.yaml), and a
+# "Check Satellite Chips" button. The generic I2C scan lists what answers on each bus; this one compares
+# that with where each satellite is configured to look, which catches a jumper that does not match the
+# address select (for example an ADS1115 at 0x4A when the select says 0x49). For bench work, not for shipping.
+
+packages:
+  satellites: !include sunsprout-factory-satellites.yaml
+  debug: !include sunsprout-debug.yaml
+
+button:
+  - platform: template
+    name: "Check Satellite Chips"
+    id: satellite_check_button
+    icon: "mdi:check-network"
+    entity_category: diagnostic
+    on_press:
+      - script.execute: satellite_check
+
+text_sensor:
+  - platform: template
+    name: "Satellite Chips"
+    id: satellite_chips
+    icon: "mdi:check-network"
+    entity_category: diagnostic
+
+script:
+  - id: satellite_check
+    mode: single
+    then:
+      - lambda: |-
+          auto bus = id(bus_user);
+          auto answers = [&](uint8_t a) { return bus->write_readv(a, nullptr, 0, nullptr, 0) == i2c::ERROR_OK; };
+          std::string out;
+          // One chip: the configured address, whether it answers, and any other address in its range that does.
+          auto check = [&](const char *label, const char *kind, uint8_t lo, uint8_t hi, uint8_t cfg, bool failed) {
+            std::string others;
+            for (uint8_t a = lo; a <= hi; a++) {
+              if (a != cfg && answers(a)) {
+                char o[8];
+                snprintf(o, sizeof(o), " 0x%02X", a);
+                others += o;
+              }
+            }
+            char b[110];
+            snprintf(b, sizeof(b), "%s %s 0x%02X %s%s%s%s; ", label, kind, cfg, answers(cfg) ? "ok" : "MISSING",
+                     failed ? " (component FAILED)" : "", others.empty() ? "" : ", also answering:", others.c_str());
+            out += b;
+          };
+          check("sat1", "ADS", 0x48, 0x4B, id(sat1_ads).get_i2c_address(), id(sat1_ads).is_failed());
+          check("sat1", "DS", 0x18, 0x1B, id(sat1_onewire).get_i2c_address(), id(sat1_onewire).is_failed());
+          check("sat2", "ADS", 0x48, 0x4B, id(sat2_ads).get_i2c_address(), id(sat2_ads).is_failed());
+          check("sat2", "DS", 0x18, 0x1B, id(sat2_onewire).get_i2c_address(), id(sat2_onewire).is_failed());
+          if (!id(user_rail).state) out += "(user rail is OFF) ";
+          if (out.size() > 250) out.resize(250);
+          ESP_LOGW("satcheck", "%s", out.c_str());
+          id(satellite_chips).publish_state(out);
