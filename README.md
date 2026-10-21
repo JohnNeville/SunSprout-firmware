@@ -25,6 +25,9 @@ Pin `@main` to a release tag such as `@hub-rev-a` to stay on a version that matc
 | `sunsprout-satellite-address.yaml` | Optional: two selects on a satellite's device to choose its ADS1115 and DS2482 I2C addresses from Home Assistant, applied at the next boot. |
 | `example-satellites.yaml` | `example-device.yaml` plus two satellites, one with its address jumpers changed. |
 | `sunsprout-factory-satellites.yaml` | The factory image plus two satellites, with the I2C addresses chosen from Home Assistant. |
+| `sunsprout-debug.yaml` | Bench diagnostics for any image: DEBUG logging, an I2C scan button that lists the addresses found on each bus, a charger and gauge status line, ESP32 memory, loop time, temperature and WiFi details, and restart buttons. Not for shipping. |
+| `sunsprout-factory-debug.yaml` | The factory image plus `sunsprout-debug.yaml`. |
+| `sunsprout-factory-satellites-debug.yaml` | The two-satellite factory image plus `sunsprout-debug.yaml` and a Check Satellite Chips button that compares each satellite's configured addresses with what answers on the bus. |
 
 The two chip drivers live in a separate repository,
 [esphome-bq-drivers](https://github.com/JohnNeville/esphome-bq-drivers), because they are

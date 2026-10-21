@@ -1,0 +1,143 @@
+# Debug additions for a SunSprout hub image. Include it next to the hub and common packages (or use
+# sunsprout-factory-debug.yaml, which is the factory image plus this). It adds:
+#
+#   - DEBUG logging;
+#   - a "Scan I2C Buses" button and text sensors that list the addresses found on the internal and the
+#     user bus, with a name for each address the firmware knows;
+#   - a "Component Status" text sensor saying whether the charger and the fuel gauge started, refreshed
+#     whenever the scan button is pressed;
+#   - ESP32 diagnostics: free memory, largest free block, fragmentation, loop time, CPU frequency, chip
+#     temperature, uptime, reset reason, device info, and the WiFi address and access point;
+#   - Restart and Restart in Safe Mode buttons.
+#
+# All of it is in the diagnostic category. It is for bench work: it costs flash, RAM and a little
+# current, so do not ship it. The user bus has no power until the rail is on, so scan it after boot.
+
+logger:
+  level: DEBUG
+
+debug:
+  update_interval: 30s
+
+button:
+  - platform: template
+    name: "Scan I2C Buses"
+    id: i2c_scan_button
+    icon: "mdi:magnify-scan"
+    entity_category: diagnostic
+    on_press:
+      - script.execute: i2c_scan
+  - platform: restart
+    name: "Restart"
+    entity_category: diagnostic
+  - platform: safe_mode
+    name: "Restart in Safe Mode"
+    entity_category: diagnostic
+
+script:
+  - id: i2c_scan
+    mode: single
+    then:
+      - lambda: |-
+          // A name for each address a SunSprout board is known to use.
+          auto name = [](uint8_t a) -> const char * {
+            if (a == 0x6B) return "BQ25798 charger";
+            if (a == 0x55) return "BQ34Z100 gauge";
+            if (a >= 0x18 && a <= 0x1B) return "DS2482 1-Wire";
+            if (a == 0x4A) return "ADS1115 or SEN0390";
+            if (a >= 0x48 && a <= 0x4B) return "ADS1115";
+            return nullptr;
+          };
+          auto scan = [&](i2c::I2CBus *bus, const char *label, text_sensor::TextSensor *list, sensor::Sensor *count) {
+            std::string found;
+            int n = 0;
+            for (uint8_t a = 0x08; a < 0x78; a++) {
+              if (bus->write_readv(a, nullptr, 0, nullptr, 0) != i2c::ERROR_OK)
+                continue;
+              char b[48];
+              if (name(a))
+                snprintf(b, sizeof(b), "%s0x%02X %s", n ? ", " : "", a, name(a));
+              else
+                snprintf(b, sizeof(b), "%s0x%02X", n ? ", " : "", a);
+              found += b;
+              n++;
+            }
+            if (found.size() > 250) found.resize(250);
+            ESP_LOGW("i2cscan", "%s: %d device(s): %s", label, n, n ? found.c_str() : "none");
+            list->publish_state(n ? found : std::string("none"));
+            count->publish_state(n);
+          };
+          scan(id(bus_internal), "internal bus", id(i2c_internal_found), id(i2c_internal_count));
+          scan(id(bus_user), "user bus", id(i2c_user_found), id(i2c_user_count));
+          std::string s = std::string("charger ") + (id(charger).is_failed() ? "FAILED" : "ok") + ", gauge " +
+                          (id(fuel_gauge).is_failed() ? "FAILED" : "ok");
+          id(component_status).publish_state(s);
+
+text_sensor:
+  - platform: template
+    name: "I2C Internal Bus Devices"
+    id: i2c_internal_found
+    icon: "mdi:chip"
+    entity_category: diagnostic
+  - platform: template
+    name: "I2C User Bus Devices"
+    id: i2c_user_found
+    icon: "mdi:chip"
+    entity_category: diagnostic
+  - platform: template
+    name: "Component Status"
+    id: component_status
+    icon: "mdi:heart-pulse"
+    entity_category: diagnostic
+  - platform: debug
+    device:
+      name: "Device Info"
+    reset_reason:
+      name: "Reset Reason"
+  - platform: wifi_info
+    ip_address:
+      name: "IP Address"
+      entity_category: diagnostic
+    ssid:
+      name: "Connected SSID"
+      entity_category: diagnostic
+    bssid:
+      name: "Connected BSSID"
+      entity_category: diagnostic
+    mac_address:
+      name: "MAC Address"
+      entity_category: diagnostic
+
+sensor:
+  - platform: template
+    name: "I2C Internal Bus Device Count"
+    id: i2c_internal_count
+    accuracy_decimals: 0
+    entity_category: diagnostic
+  - platform: template
+    name: "I2C User Bus Device Count"
+    id: i2c_user_count
+    accuracy_decimals: 0
+    entity_category: diagnostic
+  - platform: uptime
+    name: "Uptime"
+    entity_category: diagnostic
+  - platform: internal_temperature
+    name: "Chip Temperature"
+    entity_category: diagnostic
+  - platform: debug
+    free:
+      name: "Heap Free"
+      entity_category: diagnostic
+    block:
+      name: "Heap Largest Block"
+      entity_category: diagnostic
+    fragmentation:
+      name: "Heap Fragmentation"
+      entity_category: diagnostic
+    loop_time:
+      name: "Loop Time"
+      entity_category: diagnostic
+    cpu_frequency:
+      name: "CPU Frequency"
+      entity_category: diagnostic
