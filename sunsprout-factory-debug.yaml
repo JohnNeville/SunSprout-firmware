@@ -1,6 +1,0 @@
-# The factory image plus the debug additions (sunsprout-debug.yaml): an I2C scan button that lists the
-# addresses found on each bus, ESP32 diagnostics and DEBUG logging. For bench work, not for shipping.
-
-packages:
-  factory: !include sunsprout-factory.yaml
-  debug: !include sunsprout-debug.yaml

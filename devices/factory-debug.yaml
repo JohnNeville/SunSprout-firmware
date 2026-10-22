@@ -1,0 +1,6 @@
+# The factory image plus the debug additions (modules/debug.yaml): an I2C scan button that lists the
+# addresses found on each bus, ESP32 diagnostics and DEBUG logging. For bench work, not for shipping.
+
+packages:
+  factory: !include factory.yaml
+  debug: !include ../modules/debug.yaml

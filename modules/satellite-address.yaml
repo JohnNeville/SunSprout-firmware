@@ -1,14 +1,14 @@
 # Lets the owner pick one satellite's I2C addresses from Home Assistant, applied at the next boot.
 #
-# Add it next to sunsprout-satellite.yaml, with the same `id` and the addresses the satellite uses until
+# Add it next to modules/satellite.yaml, with the same `id` and the addresses the satellite uses until
 # someone changes them:
 #
 #   packages:
 #     sat1: !include
-#       file: sunsprout-satellite.yaml
+#       file: modules/satellite.yaml
 #       vars: {id: sat1, name: "Satellite 1", ads_address: 0x48, ds_address: 0x18}
 #     sat1_address: !include
-#       file: sunsprout-satellite-address.yaml
+#       file: modules/satellite-address.yaml
 #       vars: {id: sat1, name: "Satellite 1", ads_default: "0x48", ds_default: "0x18"}
 #
 # Two selects appear on the satellite's device (configuration category): the ADS1115 address

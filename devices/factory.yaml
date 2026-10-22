@@ -1,0 +1,332 @@
+# Factory image: a SunSprout hub that carries no WiFi credentials.
+#
+# Flash this once and the board comes up in setup mode. The end user then gives it
+# a network in any of four ways:
+#
+#   - from a browser over USB, through the Improv prompt on the ESP Web Tools page;
+#   - from a phone over Bluetooth, with any Improv Bluetooth client: connect, then press
+#     the BOOT button (SW2) within a minute to authorise the change;
+#   - by joining the "Sunsprout Setup" access point and using the captive portal;
+#   - by adopting it in the ESPHome dashboard, which writes a normal device file that
+#     pulls this one in as a package and adds the secrets (see dashboard_import below).
+#
+# Setup stays open for five minutes after power-up. If nobody has provisioned the board
+# by then the access point, the portal and both Improv transports close, and the status
+# LED flashes fast. Cycle the power to open the window again.
+#
+# The status LED is ESPHome's own status_led: it pulses slowly while a component has a
+# warning (the WiFi connecting, or no client such as Home Assistant connected yet), flashes
+# fast on an error (the timeout above, a failed component) and is off the rest of the time. It is plain output state, so nothing is saved and nothing comes back at the
+# next power-up. This image therefore has no "Status LED" light entity.
+#
+# Holding the BOOT button for ten seconds erases the saved settings, including any WiFi
+# credentials given through Improv or the portal, and restarts the board in setup mode.
+# The LED blinks fast for a second and a half before the restart.
+#
+# The cell is set after setup, not at build time: the Cell Chemistry, Battery Capacity,
+# Battery Energy, Default Charge Current and TS Enable entities (configuration category) are kept in
+# flash and written to the charger and the fuel gauge at every boot. Until they are changed
+# the board assumes a 6000 mAh LiFePO4 cell, which charges to 3.65 V and cannot overcharge
+# a lithium-ion cell either. Choosing Li-ion raises the limit to 4.2 V. The charger also
+# expects a thermistor on the TS pin and will not charge without one; TS Enable says which of
+# the two thermistors (charger J302, gauge J401) are fitted, and a pack with none can charge at
+# the cost of the temperature protection.
+#
+# It carries no API encryption key and no OTA password, because those belong to whoever
+# owns the board: Home Assistant sets the key on first connection, or adopting it in the
+# dashboard generates one. It does not include deep sleep, so an
+# unconfigured board stays awake long enough to be set up.
+
+substitutions:
+  name: sunsprout
+  friendly_name: Sunsprout
+
+  # Set by the release workflow (`esphome -s firmware_version ...`) to YYYY.MM.DD.<build>. A build
+  # made any other way, such as from the ESPHome dashboard, reports "dev".
+  firmware_version: "dev"
+
+  # The LiFePO4 defaults. A standard lithium-ion build changes these; see README.md.
+  battery_capacity: "6000"
+  battery_energy_mwh: "19200"
+
+packages:
+  hub: !include ../modules/hub.yaml
+  common: !include ../modules/common.yaml
+
+esphome:
+  name: "${name}"
+  friendly_name: "${friendly_name}"
+  name_add_mac_suffix: true
+  on_boot:
+    # After the charger and gauge have set themselves up and the entities above have been restored.
+    - priority: 100
+      then:
+        - globals.set:
+            id: battery_ready
+            value: "true"
+        - script.execute: apply_battery
+    # A board with no battery attached leaves the fuel gauge unpowered, so it never answers and
+    # ESPHome marks it failed. A failed component raises the error flag, which makes the status
+    # LED flash fast for good. A missing battery is a normal state for a factory image, so drop
+    # that flag (the error stays in the log) and leave the LED to the provisioning signal.
+    - priority: -200
+      then:
+        - lambda: |-
+            if (id(fuel_gauge).is_failed()) {
+              id(fuel_gauge).status_clear_error();
+            }
+  project:
+    name: JohnNeville.SunSproutHub
+    version: ${firmware_version}
+
+dashboard_import:
+  package_import_url: github://JohnNeville/SunSprout-firmware/sunsprout-factory.yaml@main
+  import_full_config: false
+
+# Encryption is on but has no key. The board starts without one and the first client to
+# connect, normally Home Assistant, sets a random key over an encrypted channel; the board
+# keeps it in flash. The key is only accepted while the five-minute setup window is open, so the
+# client has to connect within that time of power-up. Until a key is set the API counts as
+# unprovisioned, so a board that has WiFi but has never met Home Assistant will still reach the
+# timeout above. A board adopted in the ESPHome dashboard gets a key from the dashboard instead.
+api:
+  encryption:
+
+ota:
+  - platform: esphome
+
+# ESPHome batches flash writes and by default flushes them once a minute, so a cell setting
+# changed and then followed by a reset or an unplug inside that minute would be lost. Nothing
+# here writes often (only when a setting changes), so flush quickly.
+preferences:
+  flash_write_interval: 5s
+
+# No ssid: the board starts its own access point until credentials are saved.
+wifi:
+  ap:
+    ssid: "${friendly_name} Setup"
+
+captive_portal:
+
+improv_serial:
+
+# Bluetooth setup for phones. The BOOT button authorises a change, so a stranger in
+# range cannot set the network while the window is open.
+esp32_ble:
+
+improv_ble:
+  authorizer: boot_button
+  authorized_duration: 1min
+
+# The window is counted from power-up and only runs while the board has no network. When
+# it expires the transports above close; the LED is the only sign left. The warning below
+# lives in RAM, so a power cycle clears it along with reopening the window.
+provisioning:
+  id: provisioning_window
+  timeout: 5min
+  on_timeout:
+    then:
+      - logger.log:
+          level: WARN
+          format: "Provisioning window timed out. Cycle the power to try again."
+      # An error, not a warning: a slow pulse already means "online, waiting for a client".
+      - lambda: 'id(provisioning_window).status_set_error();'
+
+# GPIO6 drives the LED through R3. The hub package puts a "Status LED" light on the same pin;
+# this image gives the pin to ESPHome's status LED instead.
+status_led:
+  pin: GPIO6
+
+output:
+  - id: !remove status_led_output
+
+light:
+  - id: !remove status_led
+
+# SW2 pulls GPIO28 low and has a 10 kOhm pull-up on the board. GPIO28 is a boot-mode
+# strapping pin, which only matters at reset: holding the button during power-up still
+# enters the download mode, as it always has.
+binary_sensor:
+  - platform: gpio
+    id: boot_button
+    internal: true
+    pin:
+      number: GPIO28
+      mode:
+        input: true
+      inverted: true
+      ignore_strapping_warning: true
+    on_press:
+      then:
+        - script.execute: hold_to_reset
+    on_release:
+      then:
+        - script.stop: hold_to_reset
+
+globals:
+  - id: battery_ready
+    type: bool
+    initial_value: "false"
+
+script:
+  - id: hold_to_reset
+    mode: restart
+    then:
+      - delay: 10s
+      - if:
+          condition:
+            binary_sensor.is_on: boot_button
+          then:
+            - logger.log:
+                level: WARN
+                format: "BOOT held for 10 s: erasing the saved settings."
+            - lambda: 'id(provisioning_window).status_set_error();'
+            - delay: 1500ms
+            - button.press: factory_reset_button
+
+  # Only after boot: the entities publish their restored values while the board is starting,
+  # and recomputing then would overwrite an energy value the owner had edited.
+  - id: fill_energy
+    then:
+      - if:
+          condition:
+            lambda: 'return id(battery_ready);'
+          then:
+            - lambda: |-
+                const bool lifepo4 = id(cell_chemistry).active_index().value_or(0) == 0;
+                float mwh = id(battery_capacity_mah).state * (lifepo4 ? 3.2f : 3.7f);
+                if (mwh > 32767.0f) mwh = 32767.0f;
+                id(battery_energy_mwh).make_call().set_value(mwh).perform();
+
+  # Writes the four values to the charger (charge voltage limit, termination current, charge
+  # current) and the gauge (design capacity and energy, LFPRelax). The gauge compares each
+  # value with its data flash first and only writes what differs, so running this at every
+  # boot does not wear it.
+  - id: apply_battery
+    mode: restart
+    then:
+      # The entities above publish their restored values while the board is still starting,
+      # before the charger and gauge are ready. The boot step sets this flag and applies once.
+      - if:
+          condition:
+            lambda: 'return id(battery_ready);'
+          then:
+            - script.execute: write_battery
+
+  - id: write_battery
+    then:
+      - bq25798.configure_battery:
+          id: charger
+          chemistry: !lambda |-
+            return id(cell_chemistry).active_index().value_or(0) == 1 ? std::string("li_ion") : std::string("lifepo4");
+          battery_capacity: !lambda 'return (uint16_t) id(battery_capacity_mah).state;'
+          charge_current: !lambda 'return (uint16_t) id(default_charge_current).state;'
+          # Both = 0, Charger Only = 1, Gauge Only = 2, None = 3: the charger input is ignored for 2 and 3.
+          ts_ignore: !lambda 'return id(ts_enable).active_index().value_or(0) >= 2;'
+      - bq34z100.configure_pack:
+          id: fuel_gauge
+          design_capacity: !lambda 'return (uint16_t) id(battery_capacity_mah).state;'
+          design_energy: !lambda 'return (uint16_t) id(battery_energy_mwh).state;'
+          lifepo4_relax: !lambda 'return id(cell_chemistry).active_index().value_or(0) == 0;'
+          # The gauge reads its own thermistor for Both and Gauge Only.
+          external_thermistor: !lambda 'return id(ts_enable).active_index().value_or(0) % 2 == 0;'
+
+button:
+  - platform: factory_reset
+    id: factory_reset_button
+    name: "Restart with Factory Default Settings"
+    internal: true
+
+# --- Cell settings, chosen by the owner after setup -----------------------------------------
+# Template entities restored from flash. The defaults are the substitutions above.
+select:
+  - platform: template
+    name: "Cell Chemistry"
+    id: cell_chemistry
+    icon: "mdi:battery-heart-variant"
+    entity_category: config
+    options: ["LiFePO4", "Li-ion"]
+    initial_option: "LiFePO4"
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        - script.execute: fill_energy
+        - script.execute: apply_battery
+
+  # Which thermistors are fitted: the charger's (J302) and the fuel gauge's (J401). "Both" is the
+  # safe default and needs both fitted. Without the charger's thermistor the charger reads "too
+  # cold" and never charges; "Gauge Only" and "None" tell it to ignore that input, which removes
+  # its temperature protection (no cut-off when the cell is hot or frozen). Without the gauge's
+  # thermistor the gauge reads about -40 C and reports "Charge inhibited"; "Charger Only" and
+  # "None" make it use its own temperature sensor instead.
+  - platform: template
+    name: "TS Enable"
+    id: ts_enable
+    icon: "mdi:thermometer-check"
+    entity_category: config
+    options: ["Both", "Charger Only", "Gauge Only", "None"]
+    initial_option: "Both"
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        - script.execute: apply_battery
+
+number:
+  - platform: template
+    name: "Battery Capacity"
+    id: battery_capacity_mah
+    icon: "mdi:battery"
+    entity_category: config
+    unit_of_measurement: "mAh"
+    mode: box
+    min_value: 100
+    max_value: 20000
+    step: 50
+    initial_value: ${battery_capacity}
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        - script.execute: fill_energy
+        - script.execute: apply_battery
+
+  # Filled in from the capacity and the chemistry whenever either changes (3.2 V per cell for
+  # LiFePO4, 3.7 V for lithium-ion); edit it afterwards if the cell's datasheet says otherwise.
+  # The gauge stores it in a signed 16-bit field, so 32767 mWh is the ceiling.
+  - platform: template
+    name: "Battery Energy"
+    id: battery_energy_mwh
+    icon: "mdi:battery-charging-high"
+    entity_category: config
+    unit_of_measurement: "mWh"
+    mode: box
+    min_value: 100
+    max_value: 32767
+    step: 10
+    initial_value: ${battery_energy_mwh}
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        - script.execute: apply_battery
+
+  # The charge current applied at every boot. "Charge Current Limit" changes it live but is
+  # forgotten at the next reset; this one is kept.
+  - platform: template
+    name: "Default Charge Current"
+    id: default_charge_current
+    icon: "mdi:current-dc"
+    entity_category: config
+    unit_of_measurement: "mA"
+    mode: box
+    min_value: 100
+    max_value: 2000
+    step: 50
+    initial_value: ${charge_current}
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        - script.execute: apply_battery

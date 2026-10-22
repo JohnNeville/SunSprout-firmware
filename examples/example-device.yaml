@@ -2,12 +2,12 @@
 #
 # Copy this, change the substitutions and the secrets, and flash it. The pieces:
 #
-#   sunsprout-hub.yaml         the hardware: charger, fuel gauge, buses, LED, user rail
-#   sunsprout-common.yaml      logging and diagnostics every device wants
-#   sunsprout-deep-sleep.yaml  optional deep sleep (remove the line to stay awake)
+#   modules/hub.yaml         the hardware: charger, fuel gauge, buses, LED, user rail
+#   modules/common.yaml      logging and diagnostics every device wants
+#   modules/deep-sleep.yaml  optional deep sleep (remove the line to stay awake)
 #
 # Everything below is the part you write for any ESPHome device. To ship an image
-# that asks the end user for WiFi instead, see sunsprout-factory.yaml.
+# that asks the end user for WiFi instead, see devices/factory.yaml.
 
 substitutions:
   name: sunsprout
@@ -19,9 +19,9 @@ substitutions:
   battery_energy_mwh: "19200"
 
 packages:
-  hub: !include sunsprout-hub.yaml
-  common: !include sunsprout-common.yaml
-  deep_sleep: !include sunsprout-deep-sleep.yaml
+  hub: !include ../modules/hub.yaml
+  common: !include ../modules/common.yaml
+  deep_sleep: !include ../modules/deep-sleep.yaml
 
 esphome:
   name: "${name}"
