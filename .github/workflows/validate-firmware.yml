@@ -29,7 +29,10 @@ jobs:
           python-version: "3.12"
 
       - name: Install ESPHome
-        run: pip install esphome
+        # ESPHome 2026.11 added a required `relation` on sub-devices, which the satellite packages
+        # use. Until 2026.11 is released, build against the development branch; then change this
+        # back to `pip install esphome`.
+        run: pip install "git+https://github.com/esphome/esphome.git@dev"
 
       - name: Write placeholder secrets
         # The example config reads secrets that obviously are not in the repo.
