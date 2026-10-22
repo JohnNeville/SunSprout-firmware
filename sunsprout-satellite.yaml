@@ -32,7 +32,7 @@
 #
 # The voltages are hidden in Home Assistant by default; the percentages are on.
 #
-# Needs sunsprout-hub.yaml and sunsprout-common.yaml (the `bus_user` bus and the rail). Setup order
+# Needs ESPHome 2026.11 or newer (sub-devices need a `relation`), and sunsprout-hub.yaml and sunsprout-common.yaml (the `bus_user` bus and the rail). Setup order
 # matters on the user bus: the hub sets the bus up at priority 700, after the rail comes on, and the
 # DS2484 1-Wire bridge would set up at 999 by default, before both, so it is given 500 here and the
 # Dallas sensor 450.
@@ -45,6 +45,10 @@ esphome:
   devices:
     - id: ${id}
       name: "${name}"
+      # Part of this hub, not a separate device that Home Assistant reaches through it: the satellite
+      # has no processor of its own and works only through the hub's bus and power. Required from
+      # ESPHome 2026.11.
+      relation: child
 
 ads1115:
   - id: ${id}_ads
