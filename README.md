@@ -4,30 +4,58 @@ ESPHome configuration for the SunSprout hub. The board itself (schematic, PCB, d
 [SunSprout](https://github.com/JohnNeville/SunSprout); this repository moved out of it so that
 firmware changes do not add commits to the hardware history.
 
-Use the packages from a device file with, for example:
+## Layout
 
-```yaml
-packages:
-  hub: github://JohnNeville/SunSprout-firmware/sunsprout-hub.yaml@main
-  common: github://JohnNeville/SunSprout-firmware/sunsprout-common.yaml@main
-```
+| Folder | What is in it |
+|---|---|
+| `modules/` | Packages you include from a device file. Each does one job and has no name, networking or credentials of its own. |
+| `devices/` | Complete images, built by CI and attached to every release. Flash these, or pull one in as a package from your own device file. |
+| `examples/` | Device files to copy and change: a complete device with your own WiFi and secrets. |
 
-Pin `@main` to a release tag such as `@hub-rev-a` to stay on a version that matches a board revision.
+### Modules
 
 | File | What it is |
 |---|---|
-| `sunsprout-hub.yaml` | The board package. Hardware only: MCU, both I2C buses, charger, fuel gauge, alert inputs, user rail, status LED. |
-| `sunsprout-common.yaml` | Logging over USB and diagnostics every device wants. No networking, no name. |
-| `sunsprout-deep-sleep.yaml` | Optional deep sleep for battery or solar hubs. Leave it out while setting a board up. |
-| `example-device.yaml` | A complete device: the three packages above plus a name, WiFi, the Home Assistant API and OTA, all from `secrets.yaml`. Copy this to make your own. |
-| `sunsprout-factory.yaml` | A factory image with no credentials. It starts in setup mode so the end user supplies the WiFi. |
-| `sunsprout-satellite.yaml` | One SunSprout Satellite on the user bus, as its own Home Assistant device: four soil moisture percentages (and voltages), and a soil temperature. Include it once per satellite with `vars`. |
-| `sunsprout-satellite-address.yaml` | Optional: two selects on a satellite's device to choose its ADS1115 and DS2482 I2C addresses from Home Assistant, applied at the next boot. |
-| `example-satellites.yaml` | `example-device.yaml` plus two satellites, one with its address jumpers changed. |
-| `sunsprout-factory-satellites.yaml` | The factory image plus two satellites, with the I2C addresses chosen from Home Assistant. |
-| `sunsprout-debug.yaml` | Bench diagnostics for any image: DEBUG logging, an I2C scan button that lists the addresses found on each bus, a charger and gauge status line, ESP32 memory, loop time, temperature and WiFi details, and restart buttons. Not for shipping. |
-| `sunsprout-factory-debug.yaml` | The factory image plus `sunsprout-debug.yaml`. |
-| `sunsprout-factory-satellites-debug.yaml` | The two-satellite factory image plus `sunsprout-debug.yaml` and a Check Satellite Chips button that compares each satellite's configured addresses with what answers on the bus. |
+| `modules/hub.yaml` | The board package. Hardware only: MCU, both I2C buses, charger, fuel gauge, alert inputs, user rail, status LED. |
+| `modules/common.yaml` | Logging over USB and diagnostics every device wants. No networking, no name. |
+| `modules/deep-sleep.yaml` | Optional deep sleep for battery or solar hubs. Leave it out while setting a board up. |
+| `modules/satellite.yaml` | One SunSprout Satellite on the user bus, as its own Home Assistant device: four soil moisture percentages (and voltages), and a soil temperature. Include it once per satellite with `vars`. |
+| `modules/satellite-address.yaml` | Optional: two selects on a satellite's device to choose its ADS1115 and DS2482 I2C addresses from Home Assistant, applied at the next boot. |
+| `modules/debug.yaml` | Bench diagnostics for any image: DEBUG logging, an I2C scan button that lists the addresses found on each bus, a charger and gauge status line, ESP32 memory, loop time, temperature and WiFi details, and restart buttons. Not for shipping. |
+
+### Devices
+
+| File | What it is |
+|---|---|
+| `devices/factory.yaml` | A factory image with no credentials. It starts in setup mode so the end user supplies the WiFi. |
+| `devices/factory-satellites.yaml` | The factory image plus two satellites, with the I2C addresses chosen from Home Assistant. |
+| `devices/factory-debug.yaml` | The factory image plus `modules/debug.yaml`. |
+| `devices/factory-satellites-debug.yaml` | The two-satellite factory image plus `modules/debug.yaml` and a Check Satellite Chips button that compares each satellite's configured addresses with what answers on the bus. |
+
+Every release attaches the `.factory.bin` (full image, written at offset `0x0`) and `.ota.bin`
+(app only) of all four, with one `SHA256SUMS`.
+
+### Examples
+
+| File | What it is |
+|---|---|
+| `examples/example-device.yaml` | A complete device: the hub, common and deep-sleep modules plus a name, WiFi, the Home Assistant API and OTA, all from `secrets.yaml`. Copy this to make your own. |
+| `examples/example-satellites.yaml` | `example-device.yaml` plus two satellites, one with its address jumpers changed. |
+
+Use a module or device from your own device file with, for example:
+
+```yaml
+packages:
+  hub: github://JohnNeville/SunSprout-firmware/modules/hub.yaml@main
+  common: github://JohnNeville/SunSprout-firmware/modules/common.yaml@main
+```
+
+Pin `@main` to a release tag such as `@v2026.10.22.1` to stay on a version you have tested.
+
+The old paths `sunsprout-factory.yaml`, `sunsprout-hub.yaml`, `sunsprout-common.yaml` and
+`sunsprout-deep-sleep.yaml` in the repository root are stubs that point at the new files. They
+stay so devices already adopted in the ESPHome dashboard, and device files that use those URLs,
+keep building. Use the new paths for anything new.
 
 The two chip drivers live in a separate repository,
 [esphome-bq-drivers](https://github.com/JohnNeville/esphome-bq-drivers), because they are
@@ -44,7 +72,7 @@ Create `secrets.yaml` next to the config with `wifi_ssid`, `wifi_password`,
 `fallback_password` and `api_encryption_key`, then:
 
 ```bash
-esphome run example-device.yaml
+esphome run examples/example-device.yaml
 ```
 
 Hold `SW2` (boot) while pressing `SW1` (reset) to enter download mode for the first flash.
@@ -60,9 +88,9 @@ substitutions:
   friendly_name: Sunsprout
 
 packages:
-  hub: !include sunsprout-hub.yaml
-  common: !include sunsprout-common.yaml
-  # deep_sleep: !include sunsprout-deep-sleep.yaml   # once the board is set up
+  hub: !include modules/hub.yaml
+  common: !include modules/common.yaml
+  # deep_sleep: !include modules/deep-sleep.yaml   # once the board is set up
 
 esphome:
   name: "${name}"
@@ -82,13 +110,13 @@ wifi:
   fast_connect: true
 ```
 
-Logs come out of the USB-C port, not UART0: `sunsprout-common.yaml` sets
+Logs come out of the USB-C port, not UART0: `modules/common.yaml` sets
 `logger: hardware_uart: USB_SERIAL_JTAG`. The port resets and re-enumerates on every reboot,
 so use a terminal that reconnects, such as `tio /dev/ttyACM0` or `esphome logs`.
 
 ## Factory image and setup mode
 
-`sunsprout-factory.yaml` is for shipping a board whose owner is not you. It has no WiFi
+`devices/factory.yaml` is for shipping a board whose owner is not you. It has no WiFi
 credentials, no API encryption key and no OTA password, and it leaves deep sleep out so an
 unconfigured board stays awake. The API has encryption turned on with no key: the first client
 to connect, normally Home Assistant, sets a random key, and the board keeps it. The key is only
@@ -107,7 +135,7 @@ key from the dashboard instead. On first boot the board starts its own access po
 - **Captive portal.** Join the access point and the portal opens a WiFi picker.
 - **Adopt in the ESPHome dashboard.** The `dashboard_import` entry makes the board appear as
   discovered. Adopting it writes a normal device file that pulls the factory file in as a
-  package and adds secrets, so the owner can then add `sunsprout-deep-sleep.yaml`, change the
+  package and adds secrets, so the owner can then add `modules/deep-sleep.yaml`, change the
   substitutions, or anything else, without editing the factory file.
 
 Setup stays open for five minutes after power-up and only while the board has no network.
@@ -153,7 +181,7 @@ One limit applies: the fuel gauge's chemistry table (the 400-series profile LiFe
 accurate Battery Level) cannot be written over I2C. These settings cover everything else; the
 table is loaded when the gauge is programmed at the factory with bqStudio.
 
-Build the image with `esphome compile sunsprout-factory.yaml` and flash the
+Build the image with `esphome compile devices/factory.yaml` and flash the
 `.factory.bin` at offset `0x0`.
 
 ## Using a standard lithium-ion cell

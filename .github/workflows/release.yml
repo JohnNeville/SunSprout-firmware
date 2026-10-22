@@ -2,7 +2,7 @@
 #
 # The version is YYYY.MM.DD.N, the UTC date plus this workflow's run number, so it needs no
 # counting of earlier tags and cannot collide. It is passed to the compile as the
-# `firmware_version` substitution, which sets `project.version`: the attached factory image
+# `firmware_version` substitution, which sets `project.version`: each attached factory image
 # reports it (Home Assistant shows it as the device's software version). The release tag is
 # created by GitHub at the merge commit. A board built from `@main`, for example in the ESPHome
 # dashboard, has no version passed in and reports "dev".
@@ -19,6 +19,9 @@ on:
     branches: [main]
     paths:
       - "*.yaml"
+      - "modules/**"
+      - "devices/**"
+      - "examples/**"
 
 permissions:
   contents: read
@@ -58,7 +61,7 @@ jobs:
             --generate-notes
 
   build:
-    name: Build and attach the factory image
+    name: Build and attach the factory images
     needs: tag
     permissions:
       contents: write

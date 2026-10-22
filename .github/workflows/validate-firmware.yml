@@ -40,25 +40,31 @@ jobs:
         # generated fresh on every run, so no key is ever stored in the repository, and it
         # needs no repository secret (which fork and Dependabot runs would not receive).
         run: |
-          cat > secrets.yaml <<EOF
+          # ESPHome reads secrets.yaml from the directory of the file it is given.
+          for dir in . examples; do
+            cat > "$dir/secrets.yaml" <<EOF
           wifi_ssid: "placeholder"
           wifi_password: "placeholder"
           fallback_password: "placeholder"
           api_encryption_key: "$(openssl rand -base64 32)"
           EOF
+          done
 
-      - name: Validate the example device
-        run: esphome config example-device.yaml
-
-      - name: Validate the factory image
-        run: esphome config sunsprout-factory.yaml
-
-      - name: Validate the satellite package
+      - name: Validate the examples
         run: |
-          esphome config example-satellites.yaml
-          esphome config sunsprout-factory-satellites.yaml
-          esphome config sunsprout-factory-debug.yaml
-          esphome config sunsprout-factory-satellites-debug.yaml
+          esphome config examples/example-device.yaml
+          esphome config examples/example-satellites.yaml
+
+      - name: Validate the devices
+        run: |
+          esphome config devices/factory.yaml
+          esphome config devices/factory-satellites.yaml
+          esphome config devices/factory-debug.yaml
+          esphome config devices/factory-satellites-debug.yaml
+
+      - name: Validate the old-path stubs
+        # Devices already adopted in the dashboard pull the factory image in from its old path.
+        run: esphome config sunsprout-factory.yaml
 
       - name: Validate a standard lithium-ion build
         # The substitutions documented in README.md must keep building.
@@ -69,4 +75,4 @@ jobs:
             -s battery_capacity 3000 \
             -s battery_energy_mwh 11100 \
             -s lifepo4_relax false \
-            config example-device.yaml
+            config examples/example-device.yaml

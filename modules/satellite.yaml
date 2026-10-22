@@ -7,7 +7,7 @@
 #
 #   packages:
 #     sat1: !include
-#       file: sunsprout-satellite.yaml
+#       file: modules/satellite.yaml
 #       vars:
 #         id: sat1                   # a unique short name; used to build the entity ids
 #         name: "Satellite 1"        # the Home Assistant device name
@@ -21,7 +21,7 @@
 #       url: https://github.com/JohnNeville/SunSprout-firmware
 #       ref: main
 #       files:
-#         - path: sunsprout-satellite.yaml
+#         - path: modules/satellite.yaml
 #           vars: {id: sat1, name: "Satellite 1", ads_address: 0x48, ds_address: 0x18}
 #
 # Moisture: each input's voltage is turned into 0 to 100 % between the voltage of the probe in air
@@ -32,7 +32,7 @@
 #
 # The voltages are hidden in Home Assistant by default; the percentages are on.
 #
-# Needs ESPHome 2026.11 or newer (sub-devices need a `relation`), and sunsprout-hub.yaml and sunsprout-common.yaml (the `bus_user` bus and the rail). Setup order
+# Needs ESPHome 2026.11 or newer (sub-devices need a `relation`), and modules/hub.yaml and modules/common.yaml (the `bus_user` bus and the rail). Setup order
 # matters on the user bus: the hub sets the bus up at priority 700, after the rail comes on, and the
 # DS2484 1-Wire bridge would set up at 999 by default, before both, so it is given 500 here and the
 # Dallas sensor 450.

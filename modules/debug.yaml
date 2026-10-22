@@ -1,5 +1,5 @@
 # Debug additions for a SunSprout hub image. Include it next to the hub and common packages (or use
-# sunsprout-factory-debug.yaml, which is the factory image plus this). It adds:
+# devices/factory-debug.yaml, which is the factory image plus this). It adds:
 #
 #   - DEBUG logging;
 #   - a "Scan I2C Buses" button and text sensors that list the addresses found on the internal and the
