@@ -1,0 +1,84 @@
+# Tags and releases the firmware whenever a change to a firmware file lands on main.
+#
+# The version is calendar based: vYYYY.M.N, where N counts the releases in that month. It is
+# written into `project.version` in sunsprout-factory.yaml, so a board built from that commit
+# reports the version it was built from (Home Assistant shows it as the device's software
+# version). The version commit is made by this workflow and is what the tag points at.
+#
+# Release notes are GitHub's generated notes from the merged pull requests since the last
+# release, grouped by label as configured in .github/release.yml. The factory image is then
+# built from the tag and attached, by calling build-factory-firmware.yml.
+#
+# Changes that touch only docs or workflows do not release.
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "*.yaml"
+
+permissions:
+  contents: read
+
+# One release at a time, and never cancel one half way through.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Version, tag and release notes
+    # The version commit below is pushed with the default token, which does not start workflows,
+    # so this guard is only for anyone who pushes one by hand.
+    if: ${{ !startsWith(github.event.head_commit.message, 'Release v') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Work out the version
+        id: version
+        run: |
+          prefix="$(date -u +%Y.%-m)"
+          n=$(git tag --list "v${prefix}.*" | wc -l)
+          version="${prefix}.$((n + 1))"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Write the version into the firmware
+        run: |
+          sed -i -E '/^  project:/,/^[^ ]/ s/^(    version:).*/\1 "${{ steps.version.outputs.version }}"/' sunsprout-factory.yaml
+          grep -n -A3 '^  project:' sunsprout-factory.yaml
+          grep -q '"${{ steps.version.outputs.version }}"' sunsprout-factory.yaml
+
+      - name: Commit, tag and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Release ${{ steps.version.outputs.tag }}"
+          git tag -a "${{ steps.version.outputs.tag }}" -m "${{ steps.version.outputs.tag }}"
+          git push origin HEAD:main "${{ steps.version.outputs.tag }}"
+
+      - name: Create the release with generated notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --generate-notes --verify-tag
+
+  build:
+    name: Build and attach the factory image
+    needs: tag
+    permissions:
+      contents: write
+    uses: ./.github/workflows/build-factory-firmware.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
