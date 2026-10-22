@@ -25,12 +25,21 @@ on:
   workflow_dispatch:
   release:
     types: [published]
+  # Called by release.yml, which has to build the image itself: a release created with the
+  # default token does not trigger the `release` event above.
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to build and attach the files to
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
 
 concurrency:
-  group: build-factory-${{ github.ref }}
+  group: build-factory-${{ github.ref }}-${{ inputs.tag }}
   cancel-in-progress: true
 
 jobs:
@@ -41,6 +50,9 @@ jobs:
       short: ${{ steps.bins.outputs.short }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Empty means the event's own commit; release.yml passes the tag it just made.
+          ref: ${{ inputs.tag }}
 
       - uses: actions/setup-python@v5
         with:
@@ -65,10 +77,13 @@ jobs:
 
       - name: Collect the binaries
         id: bins
+        env:
+          TAG: ${{ inputs.tag }}
         run: |
           short="${GITHUB_SHA::7}"
           label="$short"
           if [ "$GITHUB_EVENT_NAME" = "release" ]; then label="$GITHUB_REF_NAME"; fi
+          if [ -n "$TAG" ]; then label="$TAG"; fi
           out="dist"
           mkdir -p "$out"
           factory="$(find .esphome/build -name firmware.factory.bin | head -n 1)"
@@ -91,7 +106,7 @@ jobs:
   release:
     name: Attach to the release
     needs: build
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' || inputs.tag != ''
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -104,4 +119,5 @@ jobs:
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+          TAG: ${{ inputs.tag }}
+        run: gh release upload "${TAG:-$GITHUB_REF_NAME}" dist/* --repo "$GITHUB_REPOSITORY" --clobber
