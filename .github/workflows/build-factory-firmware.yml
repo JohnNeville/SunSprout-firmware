@@ -1,20 +1,25 @@
-# Builds the factory image and keeps it as a downloadable artifact.
+# Builds the factory images and keeps them as downloadable artifacts.
 #
 # `Validate firmware` only checks that the configurations are valid. This workflow goes
-# further: it compiles sunsprout-factory.yaml, the image a new board is flashed with, so
-# every build gives a binary to flash and walk through the setup flow (Improv over USB,
-# the "Sunsprout Setup" access point, or adopting it in the ESPHome dashboard).
+# further: it compiles every image in devices/, the images a board is flashed with, so each
+# build gives binaries to flash and walk through the setup flow (Improv over USB, the
+# "Sunsprout Setup" access point, or adopting it in the ESPHome dashboard):
 #
-# Download the artifact from the run's Summary page (kept for 30 days). It holds:
-#   - sunsprout-factory-<label>.factory.bin: the full image. Write it at offset 0x0 over USB,
+#   factory                    the hub on its own
+#   factory-satellites         the hub with two satellites, I2C addresses chosen in Home Assistant
+#   factory-debug              the hub plus bench diagnostics (an I2C scan button and more)
+#   factory-satellites-debug   the satellites image plus the same diagnostics
+#
+# Download an artifact from the run's Summary page (kept for 30 days). Each holds:
+#   - sunsprout-<image>-<label>.factory.bin: the full image. Write it at offset 0x0 over USB,
 #     for example `esptool.py --chip esp32c5 write_flash 0x0 <file>`.
-#   - sunsprout-factory-<label>.ota.bin: the app only, for updating a board that is already
+#   - sunsprout-<image>-<label>.ota.bin: the app only, for updating a board that is already
 #     running ESPHome.
 #   - SHA256SUMS
 # <label> is the short commit hash, or the tag name for a release.
 #
-# Publishing a release also runs this workflow and attaches the same files to the release,
-# so a released build stays downloadable after the artifact has expired.
+# A release gets every image's files attached, plus one SHA256SUMS for all of them, so a released
+# build stays downloadable after the artifacts have expired. The debug images are for bench work.
 
 name: Build factory firmware
 
@@ -25,7 +30,7 @@ on:
   workflow_dispatch:
   release:
     types: [published]
-  # Called by release.yml, which has to build the image itself: a release created with the
+  # Called by release.yml, which has to build the images itself: a release created with the
   # default token does not trigger the `release` event above.
   workflow_call:
     inputs:
@@ -49,10 +54,16 @@ concurrency:
 
 jobs:
   build:
-    name: Compile the factory image
+    name: Compile ${{ matrix.image }}
     runs-on: ubuntu-latest
-    outputs:
-      short: ${{ steps.bins.outputs.short }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - factory
+          - factory-satellites
+          - factory-debug
+          - factory-satellites-debug
     steps:
       - uses: actions/checkout@v4
 
@@ -66,26 +77,16 @@ jobs:
         # back to `pip install esphome`.
         run: pip install "git+https://github.com/esphome/esphome.git@dev"
 
-      - name: Write placeholder secrets
-        # The factory image reads no secrets, but the shared packages are validated the same
-        # way as in `Validate firmware`, so keep the file the same shape.
-        run: |
-          cat > secrets.yaml <<EOF
-          wifi_ssid: "placeholder"
-          wifi_password: "placeholder"
-          fallback_password: "placeholder"
-          api_encryption_key: "$(openssl rand -base64 32)"
-          EOF
-
       - name: Compile
         env:
           VERSION: ${{ inputs.version }}
-        run: esphome ${VERSION:+-s firmware_version "$VERSION"} compile sunsprout-factory.yaml
+        run: esphome ${VERSION:+-s firmware_version "$VERSION"} compile devices/${{ matrix.image }}.yaml
 
       - name: Collect the binaries
         id: bins
         env:
           TAG: ${{ inputs.tag }}
+          IMAGE: ${{ matrix.image }}
         run: |
           short="${GITHUB_SHA::7}"
           label="$short"
@@ -93,11 +94,11 @@ jobs:
           if [ -n "$TAG" ]; then label="$TAG"; fi
           out="dist"
           mkdir -p "$out"
-          factory="$(find .esphome/build -name firmware.factory.bin | head -n 1)"
-          ota="$(find .esphome/build -name firmware.ota.bin | head -n 1)"
+          factory="$(find devices/.esphome/build -name firmware.factory.bin | head -n 1)"
+          ota="$(find devices/.esphome/build -name firmware.ota.bin | head -n 1)"
           test -n "$factory" && test -n "$ota"
-          cp "$factory" "$out/sunsprout-factory-$label.factory.bin"
-          cp "$ota" "$out/sunsprout-factory-$label.ota.bin"
+          cp "$factory" "$out/sunsprout-$IMAGE-$label.factory.bin"
+          cp "$ota" "$out/sunsprout-$IMAGE-$label.ota.bin"
           (cd "$out" && sha256sum * > SHA256SUMS)
           ls -l "$out"
           echo "short=$short" >> "$GITHUB_OUTPUT"
@@ -105,7 +106,7 @@ jobs:
       - name: Upload the artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sunsprout-factory-${{ steps.bins.outputs.short }}
+          name: sunsprout-${{ matrix.image }}-${{ steps.bins.outputs.short }}
           path: dist/
           if-no-files-found: error
           retention-days: 30
@@ -118,10 +119,19 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download every image
+        uses: actions/download-artifact@v4
         with:
-          name: sunsprout-factory-${{ needs.build.outputs.short }}
-          path: dist
+          pattern: sunsprout-*-*
+          merge-multiple: false
+          path: images
+
+      - name: Gather the files and one checksum list
+        run: |
+          mkdir dist
+          find images -type f ! -name SHA256SUMS -exec cp {} dist/ \;
+          (cd dist && sha256sum * > SHA256SUMS)
+          ls -l dist
 
       - name: Upload to the release
         env:
