@@ -30,7 +30,12 @@ on:
   workflow_call:
     inputs:
       tag:
-        description: Release tag to build and attach the files to
+        description: Release tag to attach the files to
+        type: string
+        required: false
+        default: ""
+      version:
+        description: Firmware version to build in (YYYY.MM.DD.N); empty builds "dev"
         type: string
         required: false
         default: ""
@@ -50,9 +55,6 @@ jobs:
       short: ${{ steps.bins.outputs.short }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          # Empty means the event's own commit; release.yml passes the tag it just made.
-          ref: ${{ inputs.tag }}
 
       - uses: actions/setup-python@v5
         with:
@@ -73,7 +75,9 @@ jobs:
           EOF
 
       - name: Compile
-        run: esphome compile sunsprout-factory.yaml
+        env:
+          VERSION: ${{ inputs.version }}
+        run: esphome ${VERSION:+-s firmware_version "$VERSION"} compile sunsprout-factory.yaml
 
       - name: Collect the binaries
         id: bins

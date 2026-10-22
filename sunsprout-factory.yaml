@@ -41,6 +41,10 @@ substitutions:
   name: sunsprout
   friendly_name: Sunsprout
 
+  # Set by the release workflow (`esphome -s firmware_version ...`) to YYYY.MM.DD.<build>. A build
+  # made any other way, such as from the ESPHome dashboard, reports "dev".
+  firmware_version: "dev"
+
   # The LiFePO4 defaults. A standard lithium-ion build changes these; see README.md.
   battery_capacity: "6000"
   battery_energy_mwh: "19200"
@@ -73,7 +77,7 @@ esphome:
             }
   project:
     name: JohnNeville.SunSproutHub
-    version: factory
+    version: ${firmware_version}
 
 dashboard_import:
   package_import_url: github://JohnNeville/SunSprout-firmware/sunsprout-factory.yaml@main

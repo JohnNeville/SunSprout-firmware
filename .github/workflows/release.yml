@@ -1,16 +1,14 @@
-# Tags and releases the firmware whenever a change to a firmware file lands on main.
+# Releases the firmware whenever a change to a firmware file lands on main. It commits nothing.
 #
-# The version is calendar based: vYYYY.M.N, where N counts the releases in that month. It is
-# written into `project.version` in sunsprout-factory.yaml, so a board built from the tag
-# reports the version it was built from (Home Assistant shows it as the device's software
-# version). That edit is a commit made on a detached HEAD, one step past the merge commit, and
-# the tag points at it. Only the tag is pushed: main never gets an extra commit, so this works
-# with branch protection. The cost is that a board built from `@main` still reports `factory`;
-# one built from the tag or from the release binaries reports the real version.
+# The version is YYYY.MM.DD.N, the UTC date plus this workflow's run number, so it needs no
+# counting of earlier tags and cannot collide. It is passed to the compile as the
+# `firmware_version` substitution, which sets `project.version`: the attached factory image
+# reports it (Home Assistant shows it as the device's software version). The release tag is
+# created by GitHub at the merge commit. A board built from `@main`, for example in the ESPHome
+# dashboard, has no version passed in and reports "dev".
 #
 # Release notes are GitHub's generated notes from the merged pull requests since the last
-# release, grouped by label as configured in .github/release.yml. The factory image is then
-# built from the tag and attached, by calling build-factory-firmware.yml.
+# release, grouped by label as configured in .github/release.yml.
 #
 # Changes that touch only docs or workflows do not release.
 
@@ -38,43 +36,26 @@ jobs:
       contents: write
     outputs:
       tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - name: Work out the version
         id: version
         run: |
-          prefix="$(date -u +%Y.%-m)"
-          n=$(git tag --list "v${prefix}.*" | wc -l)
-          version="${prefix}.$((n + 1))"
+          version="$(date -u +%Y.%m.%d).${{ github.run_number }}"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
-
-      - name: Write the version into the firmware
-        run: |
-          # Detached, so the version commit stays off main.
-          git checkout --detach
-          sed -i -E '/^  project:/,/^[^ ]/ s/^(    version:).*/\1 "${{ steps.version.outputs.version }}"/' sunsprout-factory.yaml
-          grep -n -A3 '^  project:' sunsprout-factory.yaml
-          grep -q '"${{ steps.version.outputs.version }}"' sunsprout-factory.yaml
-
-      - name: Commit on the detached HEAD, tag, and push only the tag
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "Release ${{ steps.version.outputs.tag }}"
-          git tag -a "${{ steps.version.outputs.tag }}" -m "${{ steps.version.outputs.tag }}"
-          git push origin "${{ steps.version.outputs.tag }}"
 
       - name: Create the release with generated notes
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # A re-run of a failed job reuses the same run number, so the release may exist already.
+          gh release view "${{ steps.version.outputs.tag }}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && exit 0
           gh release create "${{ steps.version.outputs.tag }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
             --title "${{ steps.version.outputs.tag }}" \
-            --generate-notes --verify-tag
+            --generate-notes
 
   build:
     name: Build and attach the factory image
@@ -84,3 +65,4 @@ jobs:
     uses: ./.github/workflows/build-factory-firmware.yml
     with:
       tag: ${{ needs.tag.outputs.tag }}
+      version: ${{ needs.tag.outputs.version }}
