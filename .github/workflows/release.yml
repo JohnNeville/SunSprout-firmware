@@ -1,9 +1,12 @@
 # Tags and releases the firmware whenever a change to a firmware file lands on main.
 #
 # The version is calendar based: vYYYY.M.N, where N counts the releases in that month. It is
-# written into `project.version` in sunsprout-factory.yaml, so a board built from that commit
+# written into `project.version` in sunsprout-factory.yaml, so a board built from the tag
 # reports the version it was built from (Home Assistant shows it as the device's software
-# version). The version commit is made by this workflow and is what the tag points at.
+# version). That edit is a commit made on a detached HEAD, one step past the merge commit, and
+# the tag points at it. Only the tag is pushed: main never gets an extra commit, so this works
+# with branch protection. The cost is that a board built from `@main` still reports `factory`;
+# one built from the tag or from the release binaries reports the real version.
 #
 # Release notes are GitHub's generated notes from the merged pull requests since the last
 # release, grouped by label as configured in .github/release.yml. The factory image is then
@@ -30,9 +33,6 @@ concurrency:
 jobs:
   tag:
     name: Version, tag and release notes
-    # The version commit below is pushed with the default token, which does not start workflows,
-    # so this guard is only for anyone who pushes one by hand.
-    if: ${{ !startsWith(github.event.head_commit.message, 'Release v') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -54,17 +54,19 @@ jobs:
 
       - name: Write the version into the firmware
         run: |
+          # Detached, so the version commit stays off main.
+          git checkout --detach
           sed -i -E '/^  project:/,/^[^ ]/ s/^(    version:).*/\1 "${{ steps.version.outputs.version }}"/' sunsprout-factory.yaml
           grep -n -A3 '^  project:' sunsprout-factory.yaml
           grep -q '"${{ steps.version.outputs.version }}"' sunsprout-factory.yaml
 
-      - name: Commit, tag and push
+      - name: Commit on the detached HEAD, tag, and push only the tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -am "Release ${{ steps.version.outputs.tag }}"
           git tag -a "${{ steps.version.outputs.tag }}" -m "${{ steps.version.outputs.tag }}"
-          git push origin HEAD:main "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
 
       - name: Create the release with generated notes
         env:
