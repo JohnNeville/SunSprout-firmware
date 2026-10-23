@@ -272,6 +272,15 @@ bq25798:
     name: "Clear Charger Interrupts"
     disabled_by_default: true
 
+  # The driver switches the charger's ADC off just before the board sleeps, with or without this switch, because
+  # the ADC and the REGN bias it brings up cost several hundred microamps of sleep current. On one hub the settled
+  # sleep current was 0.47 mA with the ADC off and 1.06 mA with it left on. The ADC comes back on at every boot.
+  # The switch is only for run-time control: set restore_mode: ALWAYS_OFF on it in a device file to keep the ADC
+  # running through sleep.
+  adc_off_in_sleep:
+    name: "Charger ADC Off Before Sleep"
+    disabled_by_default: true
+
 # --- Fuel gauge ------------------------------------------------------------
 sensor:
   - platform: bq34z100
