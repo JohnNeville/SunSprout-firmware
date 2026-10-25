@@ -8,13 +8,29 @@
 #     whenever the scan button is pressed;
 #   - ESP32 diagnostics: free memory, largest free block, fragmentation, loop time, CPU frequency, chip
 #     temperature, uptime, reset reason, device info, and the WiFi address and access point;
-#   - Restart and Restart in Safe Mode buttons.
+#   - Restart and Restart in Safe Mode buttons;
+#   - the charger's register check, in "watch" mode (set the debug_register_check substitution to "enforce" to
+#     also write drifted settings back, which is not recommended), with "Register Corrections" and
+#     "Last Register Correction" entities. Corrections counts the 5 s checks that found a difference, so a
+#     difference that lasts counts every time.
 #
 # All of it is in the diagnostic category. It is for bench work: it costs flash, RAM and a little
 # current, so do not ship it. The user bus has no power until the rail is on, so scan it after boot.
 
+substitutions:
+  debug_register_check: "watch"   # off, watch or enforce
+
 logger:
   level: DEBUG
+
+bq25798:
+  register_check: ${debug_register_check}
+  register_corrections:
+    name: "Register Corrections"
+    entity_category: diagnostic
+  last_correction:
+    name: "Last Register Correction"
+    entity_category: diagnostic
 
 debug:
   update_interval: 30s

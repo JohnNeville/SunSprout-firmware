@@ -21,7 +21,7 @@ firmware changes do not add commits to the hardware history.
 | `modules/deep-sleep.yaml` | Optional deep sleep for battery or solar hubs. Leave it out while setting a board up. |
 | `modules/satellite.yaml` | One SunSprout Satellite on the user bus, as its own Home Assistant device: four soil moisture percentages (and voltages), and a soil temperature. Include it once per satellite with `vars`. |
 | `modules/satellite-address.yaml` | Optional: two selects on a satellite's device to choose its ADS1115 and DS2482 I2C addresses from Home Assistant, applied at the next boot. |
-| `modules/debug.yaml` | Bench diagnostics for any image: DEBUG logging, an I2C scan button that lists the addresses found on each bus, a charger and gauge status line, ESP32 memory, loop time, temperature and WiFi details, and restart buttons. Not for shipping. |
+| `modules/debug.yaml` | Bench diagnostics for any image: DEBUG logging, an I2C scan button that lists the addresses found on each bus, a charger and gauge status line, ESP32 memory, loop time, temperature and WiFi details, restart buttons, and the charger register check with its counters. Not for shipping. |
 
 ### Devices
 
@@ -278,13 +278,13 @@ safe. Do not raise it.
 current to the `PROG` defaults when it expires — which for the voltage means 4.2 V. The
 board package disables it.
 
-**The charger's registers are checked and corrected.** `register_check: enforce` re-reads the
-charger every 5 s, rewrites any setting this firmware owns that has drifted, and clears the
-input lockout (`EN_HIZ`) at most every 30 s. The charger sets that lockout when a source rises
-too slowly or is too weak, as a solar panel does at dawn, and on its own retries only about every
-10 minutes. The **Register Corrections** diagnostic counts how often the firmware had to act.
-A source that cannot supply roughly 15 to 20 mA is refused whatever the firmware does. Set
-`register_check: watch` to log without writing.
+**The register check is a bench diagnostic.** The shipped images set `register_check: off`. A debug image
+(`modules/debug.yaml`) runs it in `watch` mode: every 5 s it re-reads the charger and logs and counts any setting
+that no longer matches what the firmware asked for, without writing anything. The **Register Corrections**
+diagnostic counts those checks, so a difference that lasts counts every time, and **Last Register Correction** says
+which register. The charger changes some bits itself as a panel appears and fades. Set the `debug_register_check`
+substitution to `enforce` to write drifted settings back and clear the input lockout (`EN_HIZ`) every 30 s; this is
+for experiments and is not recommended. A roof board that never wrote anything started charging at dawn by itself.
 
 **`ship_fet_present: true` is what makes the reboot button work.** `Q3` is the ship FET on
 `SDRV`. The charger locks `SDRV_CTRL` — and `EN_BATOC` — at 0 until `SFET_PRESENT` is set,
