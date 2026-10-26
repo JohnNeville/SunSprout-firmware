@@ -9,22 +9,24 @@
 #   - ESP32 diagnostics: free memory, largest free block, fragmentation, loop time, CPU frequency, chip
 #     temperature, uptime, reset reason, device info, and the WiFi address and access point;
 #   - Restart and Restart in Safe Mode buttons;
-#   - the charger's register check, in "watch" mode (set the debug_register_check substitution to "enforce" to
-#     also write drifted settings back, which is not recommended), with "Register Corrections" and
-#     "Last Register Correction" entities. Corrections counts the 5 s checks that found a difference, so a
-#     difference that lasts counts every time.
+#   - the charger's register check, with a "Register Check" select (Off, Watch or Enforce; Watch logs and counts
+#     differences, Enforce also writes drifted settings back, which is not recommended) and "Register Corrections"
+#     and "Last Register Correction" entities. Corrections counts the 5 s checks that found a difference, so a
+#     difference that lasts counts every time. The choice is kept across reboots; the debug_register_check
+#     substitution ("Off", "Watch" or "Enforce") is the first-boot value.
 #
 # All of it is in the diagnostic category. It is for bench work: it costs flash, RAM and a little
 # current, so do not ship it. The user bus has no power until the rail is on, so scan it after boot.
 
 substitutions:
-  debug_register_check: "watch"   # off, watch or enforce
+  debug_register_check: "Watch"   # Off, Watch or Enforce
 
 logger:
   level: DEBUG
 
 bq25798:
-  register_check: ${debug_register_check}
+  # Starts the check's timer; the select below changes the mode, or stops the timer, once the board is up.
+  register_check: watch
   register_corrections:
     name: "Register Corrections"
     entity_category: diagnostic
@@ -34,6 +36,29 @@ bq25798:
 
 debug:
   update_interval: 30s
+
+select:
+  - platform: template
+    name: "Register Check"
+    id: register_check_select
+    icon: "mdi:shield-search"
+    entity_category: diagnostic
+    options: ["Off", "Watch", "Enforce"]
+    initial_option: "${debug_register_check}"
+    restore_value: true
+    optimistic: true
+    set_action:
+      - lambda: !lambda |-
+          id(charger).set_register_check(x == "Enforce" ? 2 : (x == "Watch" ? 1 : 0));
+
+esphome:
+  on_boot:
+    # After the charger has set up and the select has restored its value, so a saved "Off" stops the timer.
+    - priority: 100
+      then:
+        - lambda: |-
+            auto i = id(register_check_select).active_index();
+            id(charger).set_register_check(i.has_value() && *i == 2 ? 2 : (i.has_value() && *i == 0 ? 0 : 1));
 
 button:
   - platform: template
