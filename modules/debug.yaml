@@ -14,6 +14,9 @@
 #     and "Last Register Correction" entities. Corrections counts the 5 s checks that found a difference, so a
 #     difference that lasts counts every time. The choice is kept across reboots; the debug_register_check
 #     substitution ("Off", "Watch" or "Enforce") is the first-boot value.
+#   - the fuel gauge's learning progress ("Gauge Qmax", "Gauge Update Status", "Gauge Learning Status", refreshed every
+#     5 minutes, which unseals the gauge briefly each time), its offset calibration and Enable Impedance Track buttons
+#     switched on, and a "Dump Gauge Data Flash" button that logs the gauge's data flash.
 #
 # All of it is in the diagnostic category. It is for bench work: it costs flash, RAM and a little
 # current, so do not ship it. The user bus has no power until the rail is on, so scan it after boot.
@@ -150,6 +153,23 @@ text_sensor:
       entity_category: diagnostic
 
 sensor:
+  # The hub package leaves the gauge's calibration buttons off in Home Assistant; the first-time setup needs them.
+  - id: !extend fuel_gauge
+    qmax:
+      name: "Gauge Qmax"
+    update_status:
+      name: "Gauge Update Status"
+    learning_status:
+      name: "Gauge Learning Status"
+    cc_offset_calibration:
+      disabled_by_default: false
+    board_offset_calibration:
+      disabled_by_default: false
+    enable_impedance_track:
+      disabled_by_default: false
+    dump_data_flash:
+      name: "Dump Gauge Data Flash"
+
   - platform: template
     name: "I2C Internal Bus Device Count"
     id: i2c_internal_count
