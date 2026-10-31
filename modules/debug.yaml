@@ -161,6 +161,12 @@ sensor:
       name: "Gauge Update Status"
     learning_status:
       name: "Gauge Learning Status"
+    qmax_updates_enabled:
+      name: "Gauge Qmax Updates Enabled"
+    voltage_ok:
+      name: "Gauge Voltage OK"
+    ra_updates_disabled:
+      name: "Gauge Ra Updates Disabled"
     cc_offset_calibration:
       disabled_by_default: false
     board_offset_calibration:
