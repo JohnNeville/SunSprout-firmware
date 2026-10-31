@@ -214,6 +214,7 @@ bq25798:
   # when that happens. See the driver README.
   input_selection:
     name: "Input Selection"
+    id: input_selection
   active_input:
     name: "Active Input"
   enable_hiz:

@@ -1,0 +1,36 @@
+# Optional setup wizard for the device, shown by Home Assistant (2026.11 and later) when the device is added.
+# Home Assistant versions without wizard support ignore it. It needs an ESPHome release with `api: wizard:`
+# (2026.11 or later). To use it, add it to the packages of a device file:
+#
+#   packages:
+#     wizard: !include ../modules/wizard.yaml
+#
+# Each page points at entities the hub package already creates; the wizard does not change any value itself.
+api:
+  wizard:
+    pages:
+      - title: "Connect the battery"
+        description: >-
+          With the board powered from USB-C only, connect the pack with the right polarity and its
+          thermistors. Check that the battery voltage and temperature look right before you go on.
+        entities:
+          - id: charger_vbat
+          - id: charger_battery_temperature
+
+      - title: "Choose the input and charging"
+        description: >-
+          Pick which input may power the board and set the charge current for your pack. Charging
+          stays off until you turn it on.
+        entities:
+          - id: input_selection
+          - id: charge_current_limit
+          - id: enable_charging
+
+      - title: "Charge and check"
+        description: >-
+          Charge the pack and watch the level and current. The fuel gauge learns the pack's capacity
+          over one full charge and discharge, so its level is only an estimate until then.
+        entities:
+          - id: battery_level
+          - id: charger_ibat
+          - id: charger_vbus
