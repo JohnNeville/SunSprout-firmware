@@ -33,6 +33,10 @@ bq25798:
   register_corrections:
     name: "Register Corrections"
     entity_category: diagnostic
+  # The same count without EN_MPPT and EN_HIZ, which the charger flips by itself at dawn and dusk.
+  unexpected_corrections:
+    name: "Unexpected Register Corrections"
+    entity_category: diagnostic
   last_correction:
     name: "Last Register Correction"
     entity_category: diagnostic
