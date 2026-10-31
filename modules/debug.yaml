@@ -167,6 +167,8 @@ sensor:
       name: "Gauge Voltage OK"
     ra_updates_disabled:
       name: "Gauge Ra Updates Disabled"
+    device_info:
+      name: "Gauge Versions"
     cc_offset_calibration:
       disabled_by_default: false
     board_offset_calibration:
