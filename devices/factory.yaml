@@ -52,6 +52,8 @@ substitutions:
 packages:
   hub: !include ../modules/hub.yaml
   common: !include ../modules/common.yaml
+  # Home Assistant 2026.11 and later shows this setup wizard when the board is added; older versions ignore it.
+  wizard: !include ../modules/wizard.yaml
 
 esphome:
   name: "${name}"

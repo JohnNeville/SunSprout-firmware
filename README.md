@@ -21,6 +21,7 @@ firmware changes do not add commits to the hardware history.
 | `modules/deep-sleep.yaml` | Optional deep sleep for battery or solar hubs. Leave it out while setting a board up. |
 | `modules/satellite.yaml` | One SunSprout Satellite on the user bus, as its own Home Assistant device: four soil moisture percentages (and voltages), and a soil temperature. Include it once per satellite with `vars`. |
 | `modules/satellite-address.yaml` | Optional: two selects on a satellite's device to choose its ADS1115 and DS2482 I2C addresses from Home Assistant, applied at the next boot. |
+| `modules/wizard.yaml` | A setup wizard for Home Assistant 2026.11 and later: three pages that point at the battery, input and charging entities. Included in every factory image; add it to your own device file the same way. Older Home Assistant versions ignore it, but it needs an ESPHome release with `api: wizard:` (2026.11 or later). |
 | `modules/debug.yaml` | Bench diagnostics for any image: DEBUG logging, an I2C scan button that lists the addresses found on each bus, a charger and gauge status line, ESP32 memory, loop time, temperature and WiFi details, restart buttons, and the charger register check with its counters. Not for shipping. |
 
 ### Devices
