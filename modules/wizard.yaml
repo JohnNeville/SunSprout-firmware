@@ -1,6 +1,7 @@
-# Optional setup wizard for the device, shown by Home Assistant (2026.11 and later) when the device is added.
+# Setup wizard for the device, shown by Home Assistant (2026.11 and later) when the device is added.
 # Home Assistant versions without wizard support ignore it. It needs an ESPHome release with `api: wizard:`
-# (2026.11 or later). To use it, add it to the packages of a device file:
+# (2026.11 or later). The factory images (devices/factory*.yaml) include it. For your own device file,
+# add it to the packages:
 #
 #   packages:
 #     wizard: !include ../modules/wizard.yaml
