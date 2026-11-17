@@ -191,10 +191,13 @@ bq25798:
   charger_fault:
     name: "Charger Fault"
 
+  # Keeps the user's choice across reboots, power loss and ship mode. A new board starts with charging off, so a pack is
+  # not charged before the charger is set up for its cell type (LiFePO4 needs its lower charge voltage first). Needs
+  # esphome-bq-drivers with the charging-switch restore fix; before it, the switch followed the charger's power-on default (on).
   enable_charging:
     name: "Enable Charging"
     id: enable_charging
-    restore_mode: ALWAYS_ON
+    restore_mode: RESTORE_DEFAULT_OFF
   enable_mppt:
     name: "Enable MPPT"
     id: enable_mppt
