@@ -185,6 +185,26 @@ table is loaded when the gauge is programmed at the factory with bqStudio.
 Build the image with `esphome compile devices/factory.yaml` and flash the
 `.factory.bin` at offset `0x0`.
 
+### Setup actions and the recorded setup
+
+The factory image has two Home Assistant actions (`esphome.<device>_<action>`) that the SunSprout Monitor integration uses for a guided first-time setup:
+
+- `get_setup_info` returns, without changing anything, the five cell settings, the gauge chemistry ID, the firmware version, whether charging is on and the setup state below.
+  The gauge chemistry ID entity stays disabled by default; this is how the integration reads it.
+- `setup_battery` takes `chemistry`, `capacity_mah`, `energy_mwh` (0 works it out from the capacity), `charge_current_ma` and `thermistors`, checks the ranges, writes the five settings above,
+  waits for the charger and gauge to be written, reads the values back and, only if they match, records the setup. It never turns charging on.
+
+The record is two numbers kept in flash: the setup schema (`setup_schema` in `devices/factory.yaml`, raised whenever a new setup item is added) and a hash of the schema and the five values.
+It survives reboots, updates and removing the Home Assistant integration; the BOOT-button factory reset erases it with the other settings. **Setup Status** (a diagnostic entity, disabled by default) and
+`get_setup_info` report it as:
+
+| State | Meaning |
+|---|---|
+| `unset` | No setup has been recorded |
+| `complete` | Recorded for this firmware's setup, and nothing changed since |
+| `outdated` | This firmware added setup items after the recorded setup |
+| `modified` | The values were changed after the recorded setup (for example by hand in Home Assistant) |
+
 ## Using a standard lithium-ion cell
 
 The defaults describe a 6000 mAh LiFePO4 cell. For a standard 3.7 V lithium-ion or LiPo
