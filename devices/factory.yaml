@@ -122,6 +122,29 @@ api:
               const float chem = id(gauge_chem_id).state;
               if (!std::isnan(chem)) root["gauge_chemistry_id"] = (int) chem;
 
+    - action: scan_i2c
+      description: "Read only: probes the addresses a satellite's two chips can use on the user I2C bus (ADS1115 0x48 to 0x4B, DS2482 0x18 to 0x1B) and lists the ones that answer. A chip answering at an address does not say which chip it is. Changes nothing."
+      supports_response: only
+      then:
+        - api.respond:
+            data: !lambda |-
+              std::string found;
+              auto probe = [&](uint8_t from, uint8_t to) {
+                for (uint8_t a = from; a <= to; a++) {
+                  if (id(bus_user)->write_readv(a, nullptr, 0, nullptr, 0) == i2c::ERROR_OK) {
+                    char b[8];
+                    snprintf(b, sizeof(b), "0x%02X", a);
+                    if (!found.empty()) found += ",";
+                    found += b;
+                  }
+                }
+              };
+              probe(0x18, 0x1B);
+              probe(0x48, 0x4B);
+              root["found"] = found;
+              // The satellites are powered from the user 3V3 rail; with it off nothing answers.
+              root["rail_on"] = id(user_rail).state;
+
     - action: setup_battery
       description: "Set the cell chemistry, capacity, energy, default charge current and thermistors, apply them to the charger and the fuel gauge, read them back and, if they match, record the setup as complete. Charging is not turned on."
       variables:

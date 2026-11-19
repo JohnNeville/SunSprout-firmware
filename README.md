@@ -194,6 +194,8 @@ The factory image has two Home Assistant actions (`esphome.<device>_<action>`) t
 - `setup_battery` takes `chemistry`, `capacity_mah`, `energy_mwh` (0 works it out from the capacity), `charge_current_ma` and `thermistors`, checks the ranges, writes the five settings above,
   waits for the charger and gauge to be written, reads the values back and, only if they match, records the setup. It never turns charging on.
 
+- `scan_i2c` returns, without changing anything, which of the addresses a satellite's chips can use (0x18 to 0x1B and 0x48 to 0x4B) answer on the user I2C bus, and whether the user 3V3 rail is on. An answer does not say which chip it is. The integration uses it to show only the satellite addresses that exist.
+
 The record is two numbers kept in flash: the setup schema (`setup_schema` in `devices/factory.yaml`, raised whenever a new setup item is added) and a hash of the schema and the five values.
 It survives reboots, updates and removing the Home Assistant integration; the BOOT-button factory reset erases it with the other settings. **Setup Status** (a diagnostic entity, disabled by default) and
 `get_setup_info` report it as:
