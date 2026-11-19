@@ -49,6 +49,10 @@ substitutions:
   battery_capacity: "6000"
   battery_energy_mwh: "19200"
 
+  # Version of the first-time setup. Bump it whenever a new item is added to the setup (a new value in the Setup Status key
+  # or a new argument of setup_battery): a board whose stored setup is older then reports "outdated".
+  setup_schema: "1"
+
 packages:
   hub: !include ../modules/hub.yaml
   common: !include ../modules/common.yaml
@@ -96,6 +100,134 @@ dashboard_import:
 # timeout above. A board adopted in the ESPHome dashboard gets a key from the dashboard instead.
 api:
   encryption:
+  # First-time setup, called by the SunSprout Monitor integration (Home Assistant exposes these as esphome.<device>_<action>).
+  # setup_battery writes the same persisted entities as the Cell Chemistry, Battery Capacity, Battery Energy, Default Charge
+  # Current and TS Enable settings, so changes made by hand in Home Assistant work as before. It never turns charging on.
+  actions:
+    - action: get_setup_info
+      description: "Read only: the cell settings, the fuel gauge chemistry ID and whether the first-time setup was completed."
+      supports_response: only
+      then:
+        - component.update: setup_key
+        - component.update: setup_status
+        - api.respond:
+            data: !lambda |-
+              root["setup_state"] = id(setup_status).has_state() ? id(setup_status).state : std::string("unknown");
+              root["setup_schema"] = ${setup_schema};
+              root["stored_schema"] = id(setup_schema_stored);
+              root["firmware_version"] = "${firmware_version}";
+              root["chemistry"] = std::string(id(cell_chemistry).current_option().c_str());
+              root["capacity_mah"] = (int) id(battery_capacity_mah).state;
+              root["energy_mwh"] = (int) id(battery_energy_mwh).state;
+              root["charge_current_ma"] = (int) id(default_charge_current).state;
+              root["thermistors"] = std::string(id(ts_enable).current_option().c_str());
+              root["charging_enabled"] = id(enable_charging).state;
+              const float chem = id(gauge_chem_id).state;
+              if (!std::isnan(chem)) root["gauge_chemistry_id"] = (int) chem;
+
+    - action: scan_i2c
+      description: "Read only: probes the addresses a satellite's two chips can use on the user I2C bus (ADS1115 0x48 to 0x4B, DS2482 0x18 to 0x1B) and lists the ones that answer. A chip answering at an address does not say which chip it is. Changes nothing."
+      supports_response: only
+      then:
+        - api.respond:
+            data: !lambda |-
+              std::string found;
+              auto probe = [&](uint8_t from, uint8_t to) {
+                for (uint8_t a = from; a <= to; a++) {
+                  if (id(bus_user)->write_readv(a, nullptr, 0, nullptr, 0) == i2c::ERROR_OK) {
+                    char b[8];
+                    snprintf(b, sizeof(b), "0x%02X", a);
+                    if (!found.empty()) found += ",";
+                    found += b;
+                  }
+                }
+              };
+              probe(0x18, 0x1B);
+              probe(0x48, 0x4B);
+              root["found"] = found;
+              // The satellites are powered from the user 3V3 rail; with it off nothing answers.
+              root["rail_on"] = id(user_rail).state;
+
+    - action: setup_battery
+      description: "Set the cell chemistry, capacity, energy, default charge current and thermistors, apply them to the charger and the fuel gauge, read them back and, if they match, record the setup as complete. Charging is not turned on."
+      variables:
+        chemistry: string
+        capacity_mah: int
+        energy_mwh: int
+        charge_current_ma: int
+        thermistors: string
+      supports_response: optional
+      then:
+        - lambda: |-
+            std::string e;
+            if (!id(battery_ready)) e = "The board is still starting; try again in a few seconds.";
+            else if (chemistry != "LiFePO4" && chemistry != "Li-ion") e = "chemistry must be LiFePO4 or Li-ion.";
+            else if (capacity_mah < 100 || capacity_mah > 20000) e = "capacity_mah must be 100 to 20000.";
+            else if (energy_mwh != 0 && (energy_mwh < 100 || energy_mwh > 32767)) e = "energy_mwh must be 0 (automatic) or 100 to 32767.";
+            else if (charge_current_ma < 100 || charge_current_ma > 2000) e = "charge_current_ma must be 100 to 2000.";
+            else if (thermistors != "Both" && thermistors != "Charger Only" && thermistors != "Gauge Only" && thermistors != "None")
+              e = "thermistors must be Both, Charger Only, Gauge Only or None.";
+            id(setup_error) = e;
+        - if:
+            condition:
+              lambda: 'return !id(setup_error).empty();'
+            then:
+              - api.respond:
+                  success: false
+                  error_message: !lambda 'return id(setup_error);'
+            else:
+              - select.set:
+                  id: cell_chemistry
+                  option: !lambda 'return chemistry;'
+              - number.set:
+                  id: battery_capacity_mah
+                  value: !lambda 'return capacity_mah;'
+              # 0 means "work it out": the same capacity x nominal cell voltage as fill_energy, set explicitly so a
+              # redo with an unchanged capacity and chemistry does not keep an old hand-edited value.
+              - number.set:
+                  id: battery_energy_mwh
+                  value: !lambda |-
+                    if (energy_mwh > 0) return (float) energy_mwh;
+                    return std::min(32767.0f, std::round(capacity_mah * (chemistry == "LiFePO4" ? 3.2f : 3.7f)));
+              - number.set:
+                  id: default_charge_current
+                  value: !lambda 'return charge_current_ma;'
+              - select.set:
+                  id: ts_enable
+                  option: !lambda 'return thermistors;'
+              # Each change above restarts apply_battery; wait for the last run to finish writing the charger and gauge.
+              - delay: 200ms
+              - script.wait: apply_battery
+              - component.update: setup_key
+              - lambda: |-
+                  std::string e;
+                  if (std::string(id(cell_chemistry).current_option().c_str()) != chemistry) e = "chemistry did not read back.";
+                  else if ((int) id(battery_capacity_mah).state != capacity_mah) e = "capacity did not read back.";
+                  else if (std::lround(id(battery_energy_mwh).state) !=
+                           (energy_mwh > 0 ? (long) energy_mwh
+                                           : std::min(32767L, std::lround(capacity_mah * (chemistry == "LiFePO4" ? 3.2f : 3.7f)))))
+                    e = "energy did not read back.";
+                  else if ((int) id(default_charge_current).state != charge_current_ma) e = "charge current did not read back.";
+                  else if (std::string(id(ts_enable).current_option().c_str()) != thermistors) e = "thermistors did not read back.";
+                  else if (!id(setup_key).has_state()) e = "setup key not ready.";
+                  id(setup_error) = e;
+                  if (e.empty()) {
+                    uint32_t h = (uint32_t) strtoul(id(setup_key).state.c_str(), nullptr, 16);
+                    id(setup_hash_stored) = h == 0 ? 1 : h;
+                    id(setup_schema_stored) = ${setup_schema};
+                  }
+              - component.update: setup_status
+              - api.respond:
+                  success: !lambda 'return id(setup_error).empty();'
+                  error_message: !lambda 'return id(setup_error);'
+                  data: !lambda |-
+                    root["setup_state"] = id(setup_status).has_state() ? id(setup_status).state : std::string("unknown");
+                    root["chemistry"] = std::string(id(cell_chemistry).current_option().c_str());
+                    root["capacity_mah"] = (int) id(battery_capacity_mah).state;
+                    root["energy_mwh"] = (int) id(battery_energy_mwh).state;
+                    root["charge_current_ma"] = (int) id(default_charge_current).state;
+                    root["thermistors"] = std::string(id(ts_enable).current_option().c_str());
+                    root["charging_enabled"] = id(enable_charging).state;
 
 ota:
   - platform: esphome
@@ -173,6 +305,21 @@ globals:
     type: bool
     initial_value: "false"
 
+  # The recorded first-time setup. These survive reboots and OTA updates (and removing the Home Assistant integration); a
+  # factory reset erases them with the other saved settings. setup_hash_stored is 0 until a setup has completed.
+  - id: setup_schema_stored
+    type: uint32_t
+    restore_value: true
+    initial_value: "0"
+  - id: setup_hash_stored
+    type: uint32_t
+    restore_value: true
+    initial_value: "0"
+  # Scratch: the reason a setup_battery call was refused or did not read back.
+  - id: setup_error
+    type: std::string
+    initial_value: '""'
+
 script:
   - id: hold_to_reset
     mode: restart
@@ -235,6 +382,41 @@ script:
           lifepo4_relax: !lambda 'return id(cell_chemistry).active_index().value_or(0) == 0;'
           # The gauge reads its own thermistor for Both and Gauge Only.
           external_thermistor: !lambda 'return id(ts_enable).active_index().value_or(0) % 2 == 0;'
+
+text_sensor:
+  # A hash of the schema number and every setup value, kept internal. setup_battery stores it when the setup completes;
+  # Setup Status compares the stored one with this one.
+  - platform: template
+    id: setup_key
+    internal: true
+    update_interval: 10s
+    lambda: |-
+      auto u = [](float v) { return std::isnan(v) ? 0u : (unsigned) v; };
+      char buf[96];
+      snprintf(buf, sizeof(buf), "%u|%u|%u|%u|%u|%u", (unsigned) ${setup_schema},
+               (unsigned) id(cell_chemistry).active_index().value_or(0), u(id(battery_capacity_mah).state),
+               u(id(battery_energy_mwh).state), u(id(default_charge_current).state),
+               (unsigned) id(ts_enable).active_index().value_or(0));
+      const uint32_t h = esphome::fnv1a_hash_extend(esphome::FNV1_OFFSET_BASIS, std::string(buf));
+      snprintf(buf, sizeof(buf), "%08X", (unsigned) h);
+      return std::string(buf);
+
+  # unset: no setup recorded. complete: recorded for this firmware's setup and nothing changed since. outdated: this firmware
+  # added setup items after the recorded setup. modified: the values were changed after the recorded setup.
+  - platform: template
+    id: setup_status
+    name: "Setup Status"
+    icon: "mdi:clipboard-check-outline"
+    entity_category: diagnostic
+    disabled_by_default: true
+    update_interval: 10s
+    lambda: |-
+      if (!id(setup_key).has_state()) return {};
+      if (id(setup_hash_stored) == 0) return std::string("unset");
+      if (id(setup_schema_stored) < ${setup_schema}) return std::string("outdated");
+      char buf[12];
+      snprintf(buf, sizeof(buf), "%08X", (unsigned) id(setup_hash_stored));
+      return std::string(buf) == id(setup_key).state ? std::string("complete") : std::string("modified");
 
 button:
   - platform: factory_reset

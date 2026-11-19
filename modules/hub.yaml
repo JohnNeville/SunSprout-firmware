@@ -342,6 +342,7 @@ sensor:
       name: "Battery Health"
     chem_id:
       name: "Gauge Chemistry ID"
+      id: gauge_chem_id
       disabled_by_default: true
 
     discharging:
