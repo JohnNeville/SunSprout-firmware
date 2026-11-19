@@ -31,7 +31,9 @@ substitutions:
   lifepo4_relax: "true"
 
 external_components:
-  - source: github://JohnNeville/esphome-bq-drivers
+  # TEMPORARY: the cell charge voltage in bq25798.configure_battery is in esphome-bq-drivers PR #37. Change this back to
+  # `github://JohnNeville/esphome-bq-drivers` (main) once that is merged, before merging this.
+  - source: github://JohnNeville/esphome-bq-drivers@feat/runtime-cell-voltage
     components: [bq25798, bq34z100]
 
 esp32:
