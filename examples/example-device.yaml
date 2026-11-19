@@ -32,6 +32,9 @@ esphome:
   project:
     name: JohnNeville.SunSproutHub
     version: DIY
+    sbom:
+      supplier: "John Neville"
+      url: "https://github.com/JohnNeville/SunSprout-firmware/security/policy"
 
 api:
   encryption:

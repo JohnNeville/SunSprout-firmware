@@ -80,6 +80,9 @@ esphome:
   project:
     name: JohnNeville.SunSproutHub
     version: ${firmware_version}
+    sbom:
+      supplier: "John Neville"
+      url: "https://github.com/JohnNeville/SunSprout-firmware/security/policy"
 
 dashboard_import:
   package_import_url: github://JohnNeville/SunSprout-firmware/sunsprout-factory.yaml@main

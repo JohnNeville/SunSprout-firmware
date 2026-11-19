@@ -82,6 +82,18 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: esphome ${VERSION:+-s firmware_version "$VERSION"} compile devices/${{ matrix.image }}.yaml
 
+      - name: Generate the SBOM
+        # Espressif's esp-idf-sbom reads the build's project_description.json. ESPHome adds the
+        # project, itself, external components and libraries (with commits) via the `sbom:` block.
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          pip install esp-idf-sbom
+          desc="$(find devices/.esphome/build -name project_description.json | head -n 1)"
+          test -n "$desc"
+          mkdir -p sbom
+          esp-idf-sbom create -o "sbom/$IMAGE.spdx" "$desc"
+
       - name: Collect the binaries
         id: bins
         env:
@@ -99,6 +111,7 @@ jobs:
           test -n "$factory" && test -n "$ota"
           cp "$factory" "$out/sunsprout-$IMAGE-$label.factory.bin"
           cp "$ota" "$out/sunsprout-$IMAGE-$label.ota.bin"
+          cp "sbom/$IMAGE.spdx" "$out/sunsprout-$IMAGE-$label.spdx"
           (cd "$out" && sha256sum * > SHA256SUMS)
           ls -l "$out"
           echo "short=$short" >> "$GITHUB_OUTPUT"
