@@ -157,7 +157,7 @@ the board powers up still enters the download mode as before.
 ### Setting the cell
 
 The factory image does not need a rebuild to match the cell. Once the board is on the network
-it shows five settings in the configuration section of its page in Home Assistant (or the
+it shows six settings in the configuration section of its page in Home Assistant (or the
 ESPHome dashboard):
 
 | Entity | Default | What it does |
@@ -165,6 +165,7 @@ ESPHome dashboard):
 | Cell Chemistry | LiFePO4 | `LiFePO4` charges to 3.65 V; `Li-ion` charges to 4.2 V. Also sets the gauge's LFPRelax bits. |
 | Battery Capacity | 6000 mAh | Sets the charge termination current (C/10) and the gauge's design capacity. |
 | Battery Energy | 19200 mWh | The gauge's design energy. Filled in from the capacity (x 3.2 V for LiFePO4, x 3.7 V for Li-ion) whenever the capacity or chemistry changes; edit it afterwards if the datasheet differs. 32767 mWh is the most the gauge can hold. |
+| Cell Charge Voltage | 3.65 V | The most each cell is charged to. It is set to the chemistry's standard (3.65 V LiFePO4, 4.2 V Li-ion) whenever the chemistry changes. A cell whose data sheet gives a **lower** limit, a 3.6 V LiFePO4 cell for example, can be charged to that. It can only lower the limit, by at most 0.30 V: the charger driver ignores (and logs) a value above the standard or further under it. Check it against the cell's data sheet, because it is what protects the cell. |
 | Default Charge Current | 1000 mA | The charge current applied at every boot, up to the board's 2000 mA limit. "Charge Current Limit" changes the live value but is forgotten at the next reset. |
 | TS Enable | Both | Which thermistors are fitted: the charger's (`J302`) and the fuel gauge's (`J401`). `Both` needs both. `Charger Only` makes the gauge use its own temperature sensor. `Gauge Only` and `None` make the charger ignore its thermistor input, so a pack with no thermistor there can charge; that turns off the charger's temperature protection, so the cell is no longer kept from charging while hot or frozen. Without the charger's thermistor the charger reads "too cold" and does not charge; without the gauge's, the gauge reads about -40 C and reports "Charge inhibited". |
 
@@ -189,14 +190,14 @@ Build the image with `esphome compile devices/factory.yaml` and flash the
 
 The factory image has two Home Assistant actions (`esphome.<device>_<action>`) that the SunSprout Monitor integration uses for a guided first-time setup:
 
-- `get_setup_info` returns, without changing anything, the five cell settings, the gauge chemistry ID, the firmware version, whether charging is on and the setup state below.
+- `get_setup_info` returns, without changing anything, the six cell settings, the gauge chemistry ID, the firmware version, whether charging is on and the setup state below.
   The gauge chemistry ID entity stays disabled by default; this is how the integration reads it.
-- `setup_battery` takes `chemistry`, `capacity_mah`, `energy_mwh` (0 works it out from the capacity), `charge_current_ma` and `thermistors`, checks the ranges, writes the five settings above,
+- `setup_battery` takes `chemistry`, `capacity_mah`, `energy_mwh` (0 works it out from the capacity), `cell_charge_voltage_mv` (optional; 0 or left out is the chemistry's standard, otherwise up to 300 mV under it and never above), `charge_current_ma` and `thermistors`, checks the ranges, writes the six settings above,
   waits for the charger and gauge to be written, reads the values back and, only if they match, records the setup. It never turns charging on.
 
 - `scan_i2c` returns, without changing anything, which of the addresses a satellite's chips can use (0x18 to 0x1B and 0x48 to 0x4B) answer on the user I2C bus, and whether the user 3V3 rail is on. An answer does not say which chip it is. The integration uses it to show only the satellite addresses that exist.
 
-The record is two numbers kept in flash: the setup schema (`setup_schema` in `devices/factory.yaml`, raised whenever a new setup item is added) and a hash of the schema and the five values.
+The record is two numbers kept in flash: the setup schema (`setup_schema` in `devices/factory.yaml`, raised whenever a new setup item is added) and a hash of the schema and the six values (setup schema 2 added the cell charge voltage, so a board set up on an older firmware reports `outdated` until the guide is run again).
 It survives reboots, updates and removing the Home Assistant integration; the BOOT-button factory reset erases it with the other settings. **Setup Status** (a diagnostic entity, disabled by default) and
 `get_setup_info` report it as:
 

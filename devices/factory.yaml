@@ -24,7 +24,7 @@
 # The LED blinks fast for a second and a half before the restart.
 #
 # The cell is set after setup, not at build time: the Cell Chemistry, Battery Capacity,
-# Battery Energy, Default Charge Current and TS Enable entities (configuration category) are kept in
+# Battery Energy, Cell Charge Voltage, Default Charge Current and TS Enable entities (configuration category) are kept in
 # flash and written to the charger and the fuel gauge at every boot. Until they are changed
 # the board assumes a 6000 mAh LiFePO4 cell, which charges to 3.65 V and cannot overcharge
 # a lithium-ion cell either. Choosing Li-ion raises the limit to 4.2 V. The charger also
@@ -48,10 +48,13 @@ substitutions:
   # The LiFePO4 defaults. A standard lithium-ion build changes these; see README.md.
   battery_capacity: "6000"
   battery_energy_mwh: "19200"
+  # Per-cell charge voltage limit, in volts. The chemistry sets the standard (3.65 V LiFePO4, 4.2 V Li-ion); a cell whose data sheet
+  # gives a lower limit can use it. It can only lower the limit, never raise it (see bq25798.configure_battery).
+  cell_charge_voltage: "3.65"
 
   # Version of the first-time setup. Bump it whenever a new item is added to the setup (a new value in the Setup Status key
   # or a new argument of setup_battery): a board whose stored setup is older then reports "outdated".
-  setup_schema: "1"
+  setup_schema: "2"
 
 packages:
   hub: !include ../modules/hub.yaml
@@ -119,6 +122,7 @@ api:
               root["chemistry"] = std::string(id(cell_chemistry).current_option().c_str());
               root["capacity_mah"] = (int) id(battery_capacity_mah).state;
               root["energy_mwh"] = (int) id(battery_energy_mwh).state;
+              root["cell_charge_voltage_mv"] = (int) std::lround(id(cell_charge_voltage).state * 1000.0f);
               root["charge_current_ma"] = (int) id(default_charge_current).state;
               root["thermistors"] = std::string(id(ts_enable).current_option().c_str());
               root["charging_enabled"] = id(enable_charging).state;
@@ -154,6 +158,11 @@ api:
         chemistry: string
         capacity_mah: int
         energy_mwh: int
+        # Per cell, in millivolts. 0 is the chemistry's standard (3650 LiFePO4, 4200 Li-ion). A lower limit is allowed down to 300 mV
+        # under the standard; never a higher one.
+        cell_charge_voltage_mv:
+          type: int
+          default: 0
         charge_current_ma: int
         thermistors: string
       supports_response: optional
@@ -165,6 +174,11 @@ api:
             else if (capacity_mah < 100 || capacity_mah > 20000) e = "capacity_mah must be 100 to 20000.";
             else if (energy_mwh != 0 && (energy_mwh < 100 || energy_mwh > 32767)) e = "energy_mwh must be 0 (automatic) or 100 to 32767.";
             else if (charge_current_ma < 100 || charge_current_ma > 2000) e = "charge_current_ma must be 100 to 2000.";
+            else if (cell_charge_voltage_mv != 0 &&
+                     (cell_charge_voltage_mv > (chemistry == "LiFePO4" ? 3650 : 4200) ||
+                      cell_charge_voltage_mv < (chemistry == "LiFePO4" ? 3650 : 4200) - 300))
+              e = "cell_charge_voltage_mv must be 0 (the standard) or " + std::to_string((chemistry == "LiFePO4" ? 3650 : 4200) - 300) +
+                  " to " + std::to_string(chemistry == "LiFePO4" ? 3650 : 4200) + " for " + chemistry + ".";
             else if (thermistors != "Both" && thermistors != "Charger Only" && thermistors != "Gauge Only" && thermistors != "None")
               e = "thermistors must be Both, Charger Only, Gauge Only or None.";
             id(setup_error) = e;
@@ -189,6 +203,11 @@ api:
                   value: !lambda |-
                     if (energy_mwh > 0) return (float) energy_mwh;
                     return std::min(32767.0f, std::round(capacity_mah * (chemistry == "LiFePO4" ? 3.2f : 3.7f)));
+              # Changing the chemistry above set the standard voltage for it; a lower one is set after, so it is kept.
+              - number.set:
+                  id: cell_charge_voltage
+                  value: !lambda |-
+                    return (cell_charge_voltage_mv > 0 ? cell_charge_voltage_mv : (chemistry == "LiFePO4" ? 3650 : 4200)) / 1000.0f;
               - number.set:
                   id: default_charge_current
                   value: !lambda 'return charge_current_ma;'
@@ -207,6 +226,9 @@ api:
                            (energy_mwh > 0 ? (long) energy_mwh
                                            : std::min(32767L, std::lround(capacity_mah * (chemistry == "LiFePO4" ? 3.2f : 3.7f)))))
                     e = "energy did not read back.";
+                  else if (std::lround(id(cell_charge_voltage).state * 1000.0f) !=
+                           (cell_charge_voltage_mv > 0 ? (long) cell_charge_voltage_mv : (chemistry == "LiFePO4" ? 3650L : 4200L)))
+                    e = "cell charge voltage did not read back.";
                   else if ((int) id(default_charge_current).state != charge_current_ma) e = "charge current did not read back.";
                   else if (std::string(id(ts_enable).current_option().c_str()) != thermistors) e = "thermistors did not read back.";
                   else if (!id(setup_key).has_state()) e = "setup key not ready.";
@@ -225,6 +247,7 @@ api:
                     root["chemistry"] = std::string(id(cell_chemistry).current_option().c_str());
                     root["capacity_mah"] = (int) id(battery_capacity_mah).state;
                     root["energy_mwh"] = (int) id(battery_energy_mwh).state;
+                    root["cell_charge_voltage_mv"] = (int) std::lround(id(cell_charge_voltage).state * 1000.0f);
                     root["charge_current_ma"] = (int) id(default_charge_current).state;
                     root["thermistors"] = std::string(id(ts_enable).current_option().c_str());
                     root["charging_enabled"] = id(enable_charging).state;
@@ -350,6 +373,18 @@ script:
                 if (mwh > 32767.0f) mwh = 32767.0f;
                 id(battery_energy_mwh).make_call().set_value(mwh).perform();
 
+  # The standard charge voltage for the chemistry, set whenever the chemistry changes. A lower limit for a cell whose data sheet
+  # asks for it is entered afterwards (Cell Charge Voltage, or setup_battery) and is kept until the chemistry changes again.
+  - id: fill_voltage
+    then:
+      - if:
+          condition:
+            lambda: 'return id(battery_ready);'
+          then:
+            - lambda: |-
+                const bool lifepo4 = id(cell_chemistry).active_index().value_or(0) == 0;
+                id(cell_charge_voltage).make_call().set_value(lifepo4 ? 3.65f : 4.20f).perform();
+
   # Writes the four values to the charger (charge voltage limit, termination current, charge
   # current) and the gauge (design capacity and energy, LFPRelax). The gauge compares each
   # value with its data flash first and only writes what differs, so running this at every
@@ -373,6 +408,8 @@ script:
             return id(cell_chemistry).active_index().value_or(0) == 1 ? std::string("li_ion") : std::string("lifepo4");
           battery_capacity: !lambda 'return (uint16_t) id(battery_capacity_mah).state;'
           charge_current: !lambda 'return (uint16_t) id(default_charge_current).state;'
+          # Can only lower the chemistry's standard limit; a value outside what the driver allows is ignored with a warning.
+          cell_voltage: !lambda 'return id(cell_charge_voltage).state;'
           # Both = 0, Charger Only = 1, Gauge Only = 2, None = 3: the charger input is ignored for 2 and 3.
           ts_ignore: !lambda 'return id(ts_enable).active_index().value_or(0) >= 2;'
       - bq34z100.configure_pack:
@@ -393,10 +430,11 @@ text_sensor:
     lambda: |-
       auto u = [](float v) { return std::isnan(v) ? 0u : (unsigned) v; };
       char buf[96];
-      snprintf(buf, sizeof(buf), "%u|%u|%u|%u|%u|%u", (unsigned) ${setup_schema},
+      snprintf(buf, sizeof(buf), "%u|%u|%u|%u|%u|%u|%ld", (unsigned) ${setup_schema},
                (unsigned) id(cell_chemistry).active_index().value_or(0), u(id(battery_capacity_mah).state),
                u(id(battery_energy_mwh).state), u(id(default_charge_current).state),
-               (unsigned) id(ts_enable).active_index().value_or(0));
+               (unsigned) id(ts_enable).active_index().value_or(0),
+               std::isnan(id(cell_charge_voltage).state) ? 0L : std::lround(id(cell_charge_voltage).state * 1000.0f));
       const uint32_t h = esphome::fnv1a_hash_extend(esphome::FNV1_OFFSET_BASIS, std::string(buf));
       snprintf(buf, sizeof(buf), "%08X", (unsigned) h);
       return std::string(buf);
@@ -439,6 +477,7 @@ select:
     on_value:
       then:
         - script.execute: fill_energy
+        - script.execute: fill_voltage
         - script.execute: apply_battery
 
   # Which thermistors are fitted: the charger's (J302) and the fuel gauge's (J401). "Both" is the
@@ -493,6 +532,29 @@ number:
     max_value: 32767
     step: 10
     initial_value: ${battery_energy_mwh}
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        - script.execute: apply_battery
+
+  # The per-cell charge voltage limit. The chemistry sets it (3.65 V LiFePO4, 4.2 V Li-ion) and it is set again whenever the chemistry
+  # changes. A cell whose data sheet gives a lower limit than its chemistry's standard, a 3.6 V LiFePO4 cell for example, can be
+  # charged to that. It can only LOWER the limit, down to 0.30 V under the standard: a higher value, or one that far under, is
+  # ignored by the charger driver, which logs a warning and uses the standard. The charge voltage is what protects the cell, so
+  # check it against the cell's data sheet.
+  - platform: template
+    name: "Cell Charge Voltage"
+    id: cell_charge_voltage
+    icon: "mdi:battery-charging-high"
+    entity_category: config
+    unit_of_measurement: "V"
+    device_class: voltage
+    mode: box
+    min_value: 3.35
+    max_value: 4.2
+    step: 0.01
+    initial_value: ${cell_charge_voltage}
     optimistic: true
     restore_value: true
     on_value:
