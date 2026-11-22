@@ -18,6 +18,8 @@ firmware changes do not add commits to the hardware history.
 |---|---|
 | `modules/hub.yaml` | The board package. Hardware only: MCU, both I2C buses, charger, fuel gauge, alert inputs, user rail, status LED. |
 | `modules/common.yaml` | Logging over USB and diagnostics every device wants. No networking, no name. |
+| `modules/setup.yaml` | The cell settings (chemistry, capacity, energy, cell charge voltage, charge current, thermistors) kept in flash, the guided first-time setup the SunSprout Monitor integration runs (`get_setup_info`, `setup_battery`, `scan_i2c`) and the recorded setup state. Any device file can include it; see [Using the setup without the factory image](#using-the-setup-without-the-factory-image). |
+| `modules/provisioning.yaml` | The setup mode for a board that ships with no credentials: Improv over USB and Bluetooth, the setup access point and portal, the five-minute window, the status LED and the BOOT-button reset. The factory image is `setup.yaml` plus this; leave it out when your device file has its own WiFi and API key. |
 | `modules/deep-sleep.yaml` | Optional deep sleep for battery or solar hubs. Leave it out while setting a board up. |
 | `modules/satellite.yaml` | One SunSprout Satellite on the user bus, as its own Home Assistant device: four soil moisture percentages (and voltages), and a soil temperature. Include it once per satellite with `vars`. |
 | `modules/satellite-address.yaml` | Optional: two selects on a satellite's device to choose its ADS1115 and DS2482 I2C addresses from Home Assistant, applied at the next boot. |
@@ -41,6 +43,7 @@ Every release attaches the `.factory.bin` (full image, written at offset `0x0`) 
 | File | What it is |
 |---|---|
 | `examples/example-device.yaml` | A complete device: the hub, common and deep-sleep modules plus a name, WiFi, the Home Assistant API and OTA, all from `secrets.yaml`. Copy this to make your own. |
+| `examples/example-device-with-setup.yaml` | `example-device.yaml` plus the cell settings and the guided setup (`modules/setup.yaml`) and the wizard, with your own WiFi and API key. |
 | `examples/example-satellites.yaml` | `example-device.yaml` plus two satellites, one with its address jumpers changed. |
 
 Use a module or device from your own device file with, for example:
@@ -207,6 +210,29 @@ It survives reboots, updates and removing the Home Assistant integration; the BO
 | `complete` | Recorded for this firmware's setup, and nothing changed since |
 | `outdated` | This firmware added setup items after the recorded setup |
 | `modified` | The values were changed after the recorded setup (for example by hand in Home Assistant) |
+
+## Using the setup without the factory image
+
+The cell settings and the guided first-time setup are not tied to the factory image. Add `modules/setup.yaml` to a device file that has the hub and
+common packages and its own WiFi, API key and `ota:`, and it has the same Cell Chemistry, Battery Capacity, Battery Energy, Cell Charge Voltage,
+Default Charge Current and TS Enable settings, the `get_setup_info`, `setup_battery` and `scan_i2c` actions the SunSprout Monitor integration uses,
+and the recorded setup state:
+
+```yaml
+packages:
+  hub: !include ../modules/hub.yaml
+  common: !include ../modules/common.yaml
+  setup: !include ../modules/setup.yaml
+  wizard: !include ../modules/wizard.yaml   # optional, the Home Assistant 2026.11 wizard
+```
+
+The factory image is exactly these packages plus `modules/provisioning.yaml`, which adds the setup mode for a board with no credentials (Improv, the
+access point and portal, the five-minute window, the status LED and the BOOT-button reset). A device that gives its WiFi and API key in the file, from
+secrets and with a static address for instance, leaves `provisioning.yaml` out. Nothing else differs.
+
+The first boot uses the substitutions (`battery_capacity`, `battery_energy_mwh`, `cell_charge_voltage`) and the two selects' first-boot options, so
+set them for your pack in the device file and the first boot already matches it, before the setup has been run. `examples/example-device-with-setup.yaml`
+shows all of it.
 
 ## Using a standard lithium-ion cell
 
