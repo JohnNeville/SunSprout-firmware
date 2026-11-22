@@ -54,6 +54,7 @@ esphome:
         - globals.set:
             id: battery_ready
             value: "true"
+        - script.execute: check_voltage
         - script.execute: apply_battery
 
 # ESPHome batches flash writes and by default flushes them once a minute, so a cell setting
@@ -258,6 +259,21 @@ script:
             - lambda: |-
                 const bool lifepo4 = id(cell_chemistry).active_index().value_or(0) == 0;
                 id(cell_charge_voltage).make_call().set_value(lifepo4 ? 3.65f : 4.20f).perform();
+
+  # A restored charge voltage that does not fit the restored chemistry is put back to the chemistry's standard. A board that had no such
+  # setting before starts with the LiFePO4 default whatever its chemistry (a Li-ion board would otherwise show 3.65 V and the charger driver
+  # would ignore it with a warning), and a damaged value could never be a safe limit. Run at every boot, before the values are applied.
+  - id: check_voltage
+    then:
+      - lambda: |-
+          const bool lifepo4 = id(cell_chemistry).active_index().value_or(0) == 0;
+          const float standard = lifepo4 ? 3.65f : 4.20f;
+          const float v = id(cell_charge_voltage).state;
+          // The window the charger driver accepts: the standard, or up to 0.30 V under it.
+          if (std::isnan(v) || v > standard + 0.001f || v < standard - 0.30f - 0.001f) {
+            ESP_LOGW("setup", "Cell charge voltage %.2f V does not fit the chemistry: using %.2f V", v, standard);
+            id(cell_charge_voltage).make_call().set_value(standard).perform();
+          }
 
   # Writes the four values to the charger (charge voltage limit, termination current, charge
   # current) and the gauge (design capacity and energy, LFPRelax). The gauge compares each
