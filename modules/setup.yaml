@@ -119,8 +119,8 @@ api:
         chemistry: string
         capacity_mah: int
         energy_mwh: int
-        # Per cell, in millivolts. 0 is the chemistry's standard (3650 LiFePO4, 4200 Li-ion). A lower limit is allowed down to 300 mV
-        # under the standard; never a higher one.
+        # Per cell, in millivolts. 0 is the chemistry's standard (3650 LiFePO4, 4200 Li-ion). Any lower limit down to 3350 is allowed (lower is
+        # the safe direction); never a higher one.
         cell_charge_voltage_mv:
           type: int
           default: 0
@@ -136,10 +136,9 @@ api:
             else if (energy_mwh != 0 && (energy_mwh < 100 || energy_mwh > 32767)) e = "energy_mwh must be 0 (automatic) or 100 to 32767.";
             else if (charge_current_ma < 100 || charge_current_ma > 2000) e = "charge_current_ma must be 100 to 2000.";
             else if (cell_charge_voltage_mv != 0 &&
-                     (cell_charge_voltage_mv > (chemistry == "LiFePO4" ? 3650 : 4200) ||
-                      cell_charge_voltage_mv < (chemistry == "LiFePO4" ? 3650 : 4200) - 300))
-              e = "cell_charge_voltage_mv must be 0 (the standard) or " + std::to_string((chemistry == "LiFePO4" ? 3650 : 4200) - 300) +
-                  " to " + std::to_string(chemistry == "LiFePO4" ? 3650 : 4200) + " for " + chemistry + ".";
+                     (cell_charge_voltage_mv > (chemistry == "LiFePO4" ? 3650 : 4200) || cell_charge_voltage_mv < 3350))
+              e = "cell_charge_voltage_mv must be 0 (the standard) or 3350 to " + std::to_string(chemistry == "LiFePO4" ? 3650 : 4200) +
+                  " for " + chemistry + ", never above the standard.";
             else if (thermistors != "Both" && thermistors != "Charger Only" && thermistors != "Gauge Only" && thermistors != "None")
               e = "thermistors must be Both, Charger Only, Gauge Only or None.";
             id(setup_error) = e;
@@ -260,19 +259,21 @@ script:
                 const bool lifepo4 = id(cell_chemistry).active_index().value_or(0) == 0;
                 id(cell_charge_voltage).make_call().set_value(lifepo4 ? 3.65f : 4.20f).perform();
 
-  # A restored charge voltage that does not fit the restored chemistry is put back to the chemistry's standard. A board that had no such
-  # setting before starts with the LiFePO4 default whatever its chemistry (a Li-ion board would otherwise show 3.65 V and the charger driver
-  # would ignore it with a warning), and a damaged value could never be a safe limit. Run at every boot, before the values are applied.
+  # A restored charge voltage ABOVE the restored chemistry's standard (or not a number) is lowered to the standard, so a saved value can never
+  # exceed what the chemistry allows. A lower one is kept: lower is the safe direction, and a board that had no such setting before starts with the
+  # LiFePO4 default (3.65 V) whatever its chemistry, which is safe for Li-ion too (it charges less) until the owner confirms the pack in the
+  # setup. Run at every boot, before the values are applied.
   - id: check_voltage
     then:
       - lambda: |-
           const bool lifepo4 = id(cell_chemistry).active_index().value_or(0) == 0;
           const float standard = lifepo4 ? 3.65f : 4.20f;
           const float v = id(cell_charge_voltage).state;
-          // The window the charger driver accepts: the standard, or up to 0.30 V under it.
-          if (std::isnan(v) || v > standard + 0.001f || v < standard - 0.30f - 0.001f) {
-            ESP_LOGW("setup", "Cell charge voltage %.2f V does not fit the chemistry: using %.2f V", v, standard);
+          if (std::isnan(v) || v > standard + 0.001f) {
+            ESP_LOGW("setup", "Cell charge voltage %.2f V is above the %.2f V standard for the chemistry: lowering it", v, standard);
             id(cell_charge_voltage).make_call().set_value(standard).perform();
+          } else if (v < standard - 0.30f - 0.001f) {
+            ESP_LOGW("setup", "Cell charge voltage %.2f V is more than 0.30 V under the %.2f V standard for the chemistry: the cell will charge only to it", v, standard);
           }
 
   # Writes the four values to the charger (charge voltage limit, termination current, charge
@@ -424,9 +425,9 @@ number:
 
   # The per-cell charge voltage limit. The chemistry sets it (3.65 V LiFePO4, 4.2 V Li-ion) and it is set again whenever the chemistry
   # changes. A cell whose data sheet gives a lower limit than its chemistry's standard, a 3.6 V LiFePO4 cell for example, can be
-  # charged to that. It can only LOWER the limit, down to 0.30 V under the standard: a higher value, or one that far under, is
-  # ignored by the charger driver, which logs a warning and uses the standard. The charge voltage is what protects the cell, so
-  # check it against the cell's data sheet.
+  # charged to that. It can only LOWER the limit: a value above the standard is ignored by the charger driver, which logs a warning and
+  # uses the standard; a lower one is kept (a warning is logged when it is more than 0.30 V under, as it then stores much less energy).
+  # The charge voltage is what protects the cell, so check it against the cell's data sheet.
   - platform: template
     name: "Cell Charge Voltage"
     id: cell_charge_voltage
