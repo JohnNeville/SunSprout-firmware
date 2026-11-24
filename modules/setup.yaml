@@ -172,6 +172,9 @@ api:
                   success: false
                   error_message: !lambda 'return id(setup_error);'
             else:
+              - globals.set:
+                  id: setup_busy
+                  value: "true"
               - select.set:
                   id: cell_chemistry
                   option: !lambda 'return chemistry;'
@@ -206,7 +209,11 @@ api:
                     if (termination_current_ma > 0) return (float) termination_current_ma;
                     if (chemistry == "LiFePO4") return 40.0f;
                     return std::min(1000.0f, std::max(40.0f, std::round(capacity_mah / 10.0f / 40.0f) * 40.0f));
-              # Each change above restarts apply_battery; wait for the last run to finish writing the charger and gauge.
+              # The changes above did not apply (setup_busy); apply everything once, then wait for it to finish writing.
+              - globals.set:
+                  id: setup_busy
+                  value: "false"
+              - script.execute: apply_battery
               - delay: 200ms
               - script.wait: apply_battery
               - component.update: setup_key
@@ -252,6 +259,11 @@ api:
 
 globals:
   - id: battery_ready
+    type: bool
+    initial_value: "false"
+  # True while setup_battery is setting its values: each change would otherwise run apply_battery, and every run blocks the loop for
+  # about a second (the data flash writes), so seven in a row starve the task watchdog. The action applies once at the end.
+  - id: setup_busy
     type: bool
     initial_value: "false"
 
@@ -335,10 +347,10 @@ script:
     mode: restart
     then:
       # The cell setting entities below publish their restored values while the board is still starting,
-      # before the charger and gauge are ready. The boot step sets this flag and applies once.
+      # before the charger and gauge are ready. The boot step sets this flag and applies once. setup_battery applies once itself.
       - if:
           condition:
-            lambda: 'return id(battery_ready);'
+            lambda: 'return id(battery_ready) && !id(setup_busy);'
           then:
             - script.execute: write_battery
 
