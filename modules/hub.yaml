@@ -31,7 +31,7 @@ substitutions:
   lifepo4_relax: "true"
 
 external_components:
-  - source: github://JohnNeville/esphome-bq-drivers
+  - source: github://JohnNeville/esphome-bq-drivers@feat/setup-charge-options
     components: [bq25798, bq34z100]
 
 esp32:

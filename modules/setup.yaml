@@ -39,9 +39,16 @@ substitutions:
   # gives a lower limit can use it. It can only lower the limit, never raise it (see bq25798.configure_battery).
   cell_charge_voltage: "3.65"
 
+  # The cell's highest charging temperature, in degC (30 to 53). Charging is held off from it and resumed 2 degC lower; the charger's own
+  # warm range is moved to the next step above it as a backstop. 45 degC is the usual limit for lithium cells; check the data sheet.
+  max_charge_temperature: "45"
+  # The charge-termination current, in mA (40 to 1000, steps of 40). 40 mA suits LiFePO4; it is refilled from the chemistry and
+  # capacity (C/10 for Li-ion) whenever either changes. The fuel gauge's taper current is set 110 mA above it.
+  termination_current: "40"
+
   # Version of the first-time setup. Bump it whenever a new item is added to the setup (a new value in the Setup Status key
   # or a new argument of setup_battery): a board whose stored setup is older then reports "outdated".
-  setup_schema: "2"
+  setup_schema: "3"
 
   # Set by the release workflow (`esphome -s firmware_version ...`) to YYYY.MM.DD.<build>; reported by get_setup_info.
   firmware_version: "dev"
@@ -86,6 +93,8 @@ api:
               root["cell_charge_voltage_mv"] = (int) std::lround(id(cell_charge_voltage).state * 1000.0f);
               root["charge_current_ma"] = (int) id(default_charge_current).state;
               root["thermistors"] = std::string(id(ts_enable).current_option().c_str());
+              root["max_charge_temperature_c"] = (int) std::lround(id(max_charge_temperature).state);
+              root["termination_current_ma"] = (int) std::lround(id(termination_current).state);
               root["charging_enabled"] = id(enable_charging).state;
               const float chem = id(gauge_chem_id).state;
               if (!std::isnan(chem)) root["gauge_chemistry_id"] = (int) chem;
@@ -114,7 +123,7 @@ api:
               root["rail_on"] = id(user_rail).state;
 
     - action: setup_battery
-      description: "Set the cell chemistry, capacity, energy, default charge current and thermistors, apply them to the charger and the fuel gauge, read them back and, if they match, record the setup as complete. Charging is not turned on."
+      description: "Set the cell chemistry, capacity, energy, default charge current, thermistors, highest charging temperature and termination current, apply them to the charger and the fuel gauge, read them back and, if they match, record the setup as complete. Charging is not turned on."
       variables:
         chemistry: string
         capacity_mah: int
@@ -126,6 +135,14 @@ api:
           default: 0
         charge_current_ma: int
         thermistors: string
+        # The cell's highest charging temperature in degC (30 to 53). 0 is the standard, 45.
+        max_charge_temperature_c:
+          type: int
+          default: 0
+        # The charge-termination current in mA (40 to 1000, a multiple of 40). 0 is automatic: 40 for LiFePO4, C/10 for Li-ion.
+        termination_current_ma:
+          type: int
+          default: 0
       supports_response: optional
       then:
         - lambda: |-
@@ -141,6 +158,11 @@ api:
                   " for " + chemistry + ", never above the standard.";
             else if (thermistors != "Both" && thermistors != "Charger Only" && thermistors != "Gauge Only" && thermistors != "None")
               e = "thermistors must be Both, Charger Only, Gauge Only or None.";
+            else if (max_charge_temperature_c != 0 && (max_charge_temperature_c < 30 || max_charge_temperature_c > 53))
+              e = "max_charge_temperature_c must be 0 (the standard) or 30 to 53.";
+            else if (termination_current_ma != 0 &&
+                     (termination_current_ma < 40 || termination_current_ma > 1000 || termination_current_ma % 40 != 0))
+              e = "termination_current_ma must be 0 (automatic) or 40 to 1000 in steps of 40.";
             id(setup_error) = e;
         - if:
             condition:
@@ -174,6 +196,16 @@ api:
               - select.set:
                   id: ts_enable
                   option: !lambda 'return thermistors;'
+              - number.set:
+                  id: max_charge_temperature
+                  value: !lambda 'return max_charge_temperature_c > 0 ? max_charge_temperature_c : 45;'
+              # The chemistry and capacity above refilled the automatic value; an explicit one is set after, so it is kept.
+              - number.set:
+                  id: termination_current
+                  value: !lambda |-
+                    if (termination_current_ma > 0) return (float) termination_current_ma;
+                    if (chemistry == "LiFePO4") return 40.0f;
+                    return std::min(1000.0f, std::max(40.0f, std::round(capacity_mah / 10.0f / 40.0f) * 40.0f));
               # Each change above restarts apply_battery; wait for the last run to finish writing the charger and gauge.
               - delay: 200ms
               - script.wait: apply_battery
@@ -191,6 +223,10 @@ api:
                     e = "cell charge voltage did not read back.";
                   else if ((int) id(default_charge_current).state != charge_current_ma) e = "charge current did not read back.";
                   else if (std::string(id(ts_enable).current_option().c_str()) != thermistors) e = "thermistors did not read back.";
+                  else if (std::lround(id(max_charge_temperature).state) != (max_charge_temperature_c > 0 ? max_charge_temperature_c : 45))
+                    e = "max charge temperature did not read back.";
+                  else if (termination_current_ma > 0 && std::lround(id(termination_current).state) != termination_current_ma)
+                    e = "termination current did not read back.";
                   else if (!id(setup_key).has_state()) e = "setup key not ready.";
                   id(setup_error) = e;
                   if (e.empty()) {
@@ -210,6 +246,8 @@ api:
                     root["cell_charge_voltage_mv"] = (int) std::lround(id(cell_charge_voltage).state * 1000.0f);
                     root["charge_current_ma"] = (int) id(default_charge_current).state;
                     root["thermistors"] = std::string(id(ts_enable).current_option().c_str());
+                    root["max_charge_temperature_c"] = (int) std::lround(id(max_charge_temperature).state);
+                    root["termination_current_ma"] = (int) std::lround(id(termination_current).state);
                     root["charging_enabled"] = id(enable_charging).state;
 
 globals:
@@ -247,6 +285,19 @@ script:
                 if (mwh > 32767.0f) mwh = 32767.0f;
                 id(battery_energy_mwh).make_call().set_value(mwh).perform();
 
+  # The automatic charge-termination current: the LiFePO4 minimum (40 mA, so the fuel gauge's taper threshold is reached first), or C/10 for
+  # Li-ion in steps of 40 mA. Set whenever the chemistry or the capacity changes; an owner's value is entered afterwards and kept until then.
+  - id: fill_termination
+    then:
+      - if:
+          condition:
+            lambda: 'return id(battery_ready);'
+          then:
+            - lambda: |-
+                const bool lifepo4 = id(cell_chemistry).active_index().value_or(0) == 0;
+                float ma = lifepo4 ? 40.0f : std::round(id(battery_capacity_mah).state / 10.0f / 40.0f) * 40.0f;
+                id(termination_current).make_call().set_value(std::min(1000.0f, std::max(40.0f, ma))).perform();
+
   # The standard charge voltage for the chemistry, set whenever the chemistry changes. A lower limit for a cell whose data sheet
   # asks for it is entered afterwards (Cell Charge Voltage, or setup_battery) and is kept until the chemistry changes again.
   - id: fill_voltage
@@ -276,8 +327,8 @@ script:
             ESP_LOGW("setup", "Cell charge voltage %.2f V is more than 0.30 V under the %.2f V standard for the chemistry: the cell will charge only to it", v, standard);
           }
 
-  # Writes the four values to the charger (charge voltage limit, termination current, charge
-  # current) and the gauge (design capacity and energy, LFPRelax). The gauge compares each
+  # Writes the values to the charger (charge voltage limit, termination current, charge current, highest charging temperature)
+  # and the gauge (design capacity and energy, LFPRelax, taper current). The gauge compares each
   # value with its data flash first and only writes what differs, so running this at every
   # boot does not wear it.
   - id: apply_battery
@@ -303,6 +354,8 @@ script:
           cell_voltage: !lambda 'return id(cell_charge_voltage).state;'
           # Both = 0, Charger Only = 1, Gauge Only = 2, None = 3: the charger input is ignored for 2 and 3.
           ts_ignore: !lambda 'return id(ts_enable).active_index().value_or(0) >= 2;'
+          termination_current: !lambda 'return (uint16_t) std::lround(id(termination_current).state);'
+          max_charge_temperature: !lambda 'return id(max_charge_temperature).state;'
       - bq34z100.configure_pack:
           id: fuel_gauge
           design_capacity: !lambda 'return (uint16_t) id(battery_capacity_mah).state;'
@@ -310,6 +363,9 @@ script:
           lifepo4_relax: !lambda 'return id(cell_chemistry).active_index().value_or(0) == 0;'
           # The gauge reads its own thermistor for Both and Gauge Only.
           external_thermistor: !lambda 'return id(ts_enable).active_index().value_or(0) % 2 == 0;'
+          # The gauge sets the full flag once the current stays under this for its taper window; it has to be above the
+          # charger's termination current, or the charger ends the charge first and the level is never verified.
+          taper_current: !lambda 'return (uint16_t) std::min(2000L, std::lround(id(termination_current).state) + 110L);'
 
 text_sensor:
   # A hash of the schema number and every setup value, kept internal. setup_battery stores it when the setup completes;
@@ -320,12 +376,13 @@ text_sensor:
     update_interval: 10s
     lambda: |-
       auto u = [](float v) { return std::isnan(v) ? 0u : (unsigned) v; };
-      char buf[96];
-      snprintf(buf, sizeof(buf), "%u|%u|%u|%u|%u|%u|%ld", (unsigned) ${setup_schema},
+      char buf[128];
+      snprintf(buf, sizeof(buf), "%u|%u|%u|%u|%u|%u|%ld|%u|%u", (unsigned) ${setup_schema},
                (unsigned) id(cell_chemistry).active_index().value_or(0), u(id(battery_capacity_mah).state),
                u(id(battery_energy_mwh).state), u(id(default_charge_current).state),
                (unsigned) id(ts_enable).active_index().value_or(0),
-               std::isnan(id(cell_charge_voltage).state) ? 0L : std::lround(id(cell_charge_voltage).state * 1000.0f));
+               std::isnan(id(cell_charge_voltage).state) ? 0L : std::lround(id(cell_charge_voltage).state * 1000.0f),
+               u(id(max_charge_temperature).state), u(id(termination_current).state));
       const uint32_t h = esphome::fnv1a_hash_extend(esphome::FNV1_OFFSET_BASIS, std::string(buf));
       snprintf(buf, sizeof(buf), "%08X", (unsigned) h);
       return std::string(buf);
@@ -363,6 +420,7 @@ select:
       then:
         - script.execute: fill_energy
         - script.execute: fill_voltage
+        - script.execute: fill_termination
         - script.execute: apply_battery
 
   # Which thermistors are fitted: the charger's (J302) and the fuel gauge's (J401). "Both" is the
@@ -401,6 +459,7 @@ number:
     on_value:
       then:
         - script.execute: fill_energy
+        - script.execute: fill_termination
         - script.execute: apply_battery
 
   # Filled in from the capacity and the chemistry whenever either changes (3.2 V per cell for
@@ -440,6 +499,46 @@ number:
     max_value: 4.2
     step: 0.01
     initial_value: ${cell_charge_voltage}
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        - script.execute: apply_battery
+
+  # The cell's highest charging temperature. Charging is held off from it and resumed 2 degC lower; the charger's warm range is moved to the
+  # next step above it as a backstop (suspend, so the converter keeps running). Take it from the cell's data sheet.
+  - platform: template
+    name: "Max Charge Temperature"
+    id: max_charge_temperature
+    icon: "mdi:thermometer-alert"
+    entity_category: config
+    unit_of_measurement: "°C"
+    device_class: temperature
+    mode: box
+    min_value: 30
+    max_value: 53
+    step: 1
+    initial_value: ${max_charge_temperature}
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        - script.execute: apply_battery
+
+  # The charge-termination current. Filled in from the chemistry and capacity (40 mA for LiFePO4, C/10 for Li-ion); edit it afterwards if the
+  # cell's data sheet says otherwise. The fuel gauge's taper current follows it (110 mA above), so the gauge sees the end of the charge.
+  - platform: template
+    name: "Termination Current"
+    id: termination_current
+    icon: "mdi:current-dc"
+    entity_category: config
+    unit_of_measurement: "mA"
+    device_class: current
+    mode: box
+    min_value: 40
+    max_value: 1000
+    step: 40
+    initial_value: ${termination_current}
     optimistic: true
     restore_value: true
     on_value:
