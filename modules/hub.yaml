@@ -13,8 +13,8 @@
 # Override any of the substitutions below in your own config.
 
 substitutions:
-  # Nominal capacity of the attached cell, in mAh. Sets the charge-termination
-  # current to C/10 and the fuel gauge's Design Capacity.
+  # Nominal capacity of the attached cell, in mAh. The fuel gauge's Design Capacity,
+  # and the charge-termination current (C/10) for Li-ion; LiFePO4 terminates at 40 mA.
   battery_capacity: "6000"
   battery_energy_mwh: "19200"   # capacity x 3.2 V nominal, for LiFePO4
 
