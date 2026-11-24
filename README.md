@@ -166,7 +166,7 @@ ESPHome dashboard):
 | Entity | Default | What it does |
 |---|---|---|
 | Cell Chemistry | LiFePO4 | `LiFePO4` charges to 3.65 V; `Li-ion` charges to 4.2 V. Also sets the gauge's LFPRelax bits. |
-| Battery Capacity | 6000 mAh | Sets the charge termination current (C/10) and the gauge's design capacity. |
+| Battery Capacity | 6000 mAh | Sets the gauge's design capacity, and the charge termination current (C/10) for Li-ion. A LiFePO4 charge always terminates at 40 mA, so the gauge's 150 mA taper threshold is reached first and it can set the full flag. |
 | Battery Energy | 19200 mWh | The gauge's design energy. Filled in from the capacity (x 3.2 V for LiFePO4, x 3.7 V for Li-ion) whenever the capacity or chemistry changes; edit it afterwards if the datasheet differs. 32767 mWh is the most the gauge can hold. |
 | Cell Charge Voltage | 3.65 V | The most each cell is charged to. It is set to the chemistry's standard (3.65 V LiFePO4, 4.2 V Li-ion) whenever the chemistry changes. A cell whose data sheet gives a **lower** limit, a 3.6 V LiFePO4 cell for example, can be charged to that. It can only lower the limit: the charger driver ignores (and logs) a value above the standard, and keeps a lower one (with a warning when it is more than 0.30 V under, since the cell then stores much less energy). A board that had a chemistry saved before this setting existed starts at 3.65 V, which is safe for Li-ion too, until the pack is confirmed in the setup. Check it against the cell's data sheet, because it is what protects the cell. |
 | Default Charge Current | 1000 mA | The charge current applied at every boot, up to the board's 2000 mA limit. "Charge Current Limit" changes the live value but is forgotten at the next reset. |
@@ -242,7 +242,7 @@ cell, override these substitutions in your device file:
 | Substitution | LiFePO4 default | Standard Li-ion | Why |
 |---|---|---|---|
 | `cell_chemistry` | `lifepo4` | `li_ion` | Charge limit: 3.65 V becomes 4.20 V. |
-| `battery_capacity` | `6000` | your cell, in mAh | Sets C/10 charge termination and the gauge's design capacity. |
+| `battery_capacity` | `6000` | your cell, in mAh | The gauge's design capacity, and C/10 charge termination for Li-ion (LiFePO4 terminates at 40 mA). |
 | `battery_energy_mwh` | `19200` | capacity × 3.7 | The gauge's design energy; the default is capacity × 3.2 V. |
 | `lifepo4_relax` | `true` | `false` | Only applies once a LiFePO4 chemistry is in the gauge. |
 | `charge_current` | `1000` | at most your cell's rating | The ceiling stays 2000 mA whatever you set. |
