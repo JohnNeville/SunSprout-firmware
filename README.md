@@ -18,7 +18,7 @@ firmware changes do not add commits to the hardware history.
 |---|---|
 | `modules/hub.yaml` | The board package. Hardware only: MCU, both I2C buses, charger, fuel gauge, alert inputs, user rail, status LED. |
 | `modules/common.yaml` | Logging over USB and diagnostics every device wants. No networking, no name. |
-| `modules/setup.yaml` | The cell settings (chemistry, capacity, energy, cell charge voltage, charge current, thermistors) kept in flash, the guided first-time setup the SunSprout Monitor integration runs (`get_setup_info`, `setup_battery`, `scan_i2c`) and the recorded setup state. Any device file can include it; see [Using the setup without the factory image](#using-the-setup-without-the-factory-image). |
+| `modules/setup.yaml` | The cell settings (chemistry, capacity, energy, cell charge voltage, charge current, thermistors, highest charging temperature, termination current) kept in flash, the guided first-time setup the SunSprout Monitor integration runs (`get_setup_info`, `setup_battery`, `scan_i2c`) and the recorded setup state. Any device file can include it; see [Using the setup without the factory image](#using-the-setup-without-the-factory-image). |
 | `modules/provisioning.yaml` | The setup mode for a board that ships with no credentials: Improv over USB and Bluetooth, the setup access point and portal, the five-minute window, the status LED and the BOOT-button reset. The factory image is `setup.yaml` plus this; leave it out when your device file has its own WiFi and API key. |
 | `modules/deep-sleep.yaml` | Optional deep sleep for battery or solar hubs. Leave it out while setting a board up. |
 | `modules/satellite.yaml` | One SunSprout Satellite on the user bus, as its own Home Assistant device: four soil moisture percentages (and voltages), and a soil temperature. Include it once per satellite with `vars`. |
@@ -160,7 +160,7 @@ the board powers up still enters the download mode as before.
 ### Setting the cell
 
 The factory image does not need a rebuild to match the cell. Once the board is on the network
-it shows six settings in the configuration section of its page in Home Assistant (or the
+it shows eight settings in the configuration section of its page in Home Assistant (or the
 ESPHome dashboard):
 
 | Entity | Default | What it does |
@@ -170,6 +170,8 @@ ESPHome dashboard):
 | Battery Energy | 19200 mWh | The gauge's design energy. Filled in from the capacity (x 3.2 V for LiFePO4, x 3.7 V for Li-ion) whenever the capacity or chemistry changes; edit it afterwards if the datasheet differs. 32767 mWh is the most the gauge can hold. |
 | Cell Charge Voltage | 3.65 V | The most each cell is charged to. It is set to the chemistry's standard (3.65 V LiFePO4, 4.2 V Li-ion) whenever the chemistry changes. A cell whose data sheet gives a **lower** limit, a 3.6 V LiFePO4 cell for example, can be charged to that. It can only lower the limit: the charger driver ignores (and logs) a value above the standard, and keeps a lower one (with a warning when it is more than 0.30 V under, since the cell then stores much less energy). A board that had a chemistry saved before this setting existed starts at 3.65 V, which is safe for Li-ion too, until the pack is confirmed in the setup. Check it against the cell's data sheet, because it is what protects the cell. |
 | Default Charge Current | 1000 mA | The charge current applied at every boot, up to the board's 2000 mA limit. "Charge Current Limit" changes the live value but is forgotten at the next reset. |
+| Max Charge Temperature | 45 °C | The cell's highest charging temperature (30 to 53 °C), from its data sheet. Charging is held off from it and resumes 2 °C lower. The charger's own warm range is moved to the next step above it (40, 45, 50 or 55 °C) and set to suspend charging there, so the charger keeps running from the input instead of tripping its battery over-voltage protection on a charged cell. Home Assistant may show it in °F. |
+| Termination Current | 40 mA | The charge-termination current (40 to 1000 mA, steps of 40). Filled in from the chemistry and capacity when either changes: 40 mA for LiFePO4, C/10 for Li-ion. The fuel gauge's taper current follows it, 110 mA above, so the gauge sees the end of the charge and sets the full flag before the charger stops. |
 | TS Enable | Both | Which thermistors are fitted: the charger's (`J302`) and the fuel gauge's (`J401`). `Both` needs both. `Charger Only` makes the gauge use its own temperature sensor. `Gauge Only` and `None` make the charger ignore its thermistor input, so a pack with no thermistor there can charge; that turns off the charger's temperature protection, so the cell is no longer kept from charging while hot or frozen. Without the charger's thermistor the charger reads "too cold" and does not charge; without the gauge's, the gauge reads about -40 C and reports "Charge inhibited". |
 
 The values are kept in flash and written to the charger and the fuel gauge at every boot. The
@@ -195,7 +197,7 @@ The factory image has two Home Assistant actions (`esphome.<device>_<action>`) t
 
 - `get_setup_info` returns, without changing anything, the six cell settings, the gauge chemistry ID, the firmware version, whether charging is on and the setup state below.
   The gauge chemistry ID entity stays disabled by default; this is how the integration reads it.
-- `setup_battery` takes `chemistry`, `capacity_mah`, `energy_mwh` (0 works it out from the capacity), `cell_charge_voltage_mv` (optional; 0 or left out is the chemistry's standard, otherwise 3350 mV up to the standard and never above), `charge_current_ma` and `thermistors`, checks the ranges, writes the six settings above,
+- `setup_battery` takes `chemistry`, `capacity_mah`, `energy_mwh` (0 works it out from the capacity), `cell_charge_voltage_mv` (optional; 0 or left out is the chemistry's standard, otherwise 3350 mV up to the standard and never above), `charge_current_ma`, `thermistors`, `max_charge_temperature_c` (optional; 0 or left out is 45) and `termination_current_ma` (optional; 0 or left out is automatic), checks the ranges, writes the eight settings above,
   waits for the charger and gauge to be written, reads the values back and, only if they match, records the setup. It never turns charging on.
 
 - `scan_i2c` returns, without changing anything, which of the addresses a satellite's chips can use (0x18 to 0x1B and 0x48 to 0x4B) answer on the user I2C bus, and whether the user 3V3 rail is on. An answer does not say which chip it is. The integration uses it to show only the satellite addresses that exist.
@@ -215,7 +217,7 @@ It survives reboots, updates and removing the Home Assistant integration; the BO
 
 The cell settings and the guided first-time setup are not tied to the factory image. Add `modules/setup.yaml` to a device file that has the hub and
 common packages and its own WiFi, API key and `ota:`, and it has the same Cell Chemistry, Battery Capacity, Battery Energy, Cell Charge Voltage,
-Default Charge Current and TS Enable settings, the `get_setup_info`, `setup_battery` and `scan_i2c` actions the SunSprout Monitor integration uses,
+Default Charge Current, TS Enable, Max Charge Temperature and Termination Current settings, the `get_setup_info`, `setup_battery` and `scan_i2c` actions the SunSprout Monitor integration uses,
 and the recorded setup state:
 
 ```yaml
