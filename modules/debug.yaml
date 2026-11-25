@@ -75,9 +75,6 @@ button:
     entity_category: diagnostic
     on_press:
       - script.execute: i2c_scan
-  - platform: restart
-    name: "Restart"
-    entity_category: diagnostic
   - platform: safe_mode
     name: "Restart in Safe Mode"
     entity_category: diagnostic

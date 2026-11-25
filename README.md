@@ -350,6 +350,14 @@ driver rejects the config outright rather than let that happen quietly.
 ports and the user rail — so the board reboots. The board package sets
 `ship_fet_action_delay: false`, otherwise the charger waits ~10 s before acting.
 
+**From a low pack with no input, a power cycle can leave the board off.** With `Q3` open the
+charger can drop out, and below its wake-up threshold (3.25 to 3.55 V with a ship FET) it does
+not close `Q3` again until USB or solar power returns. On the bench two boards restarted at
+3.47 V and above and stayed off at 3.33 V and below, with or without a load. The button is not
+blocked: the **Power Cycle Status** sensor reads `Risky: ...` when there is no input and the pack
+is under `power_cycle_min_voltage` (3.50 V). Expect the same from the `SW3` hold, which does the
+same reset. **Restart** is a software reboot that leaves `Q3` closed; it works from a low pack.
+
 Two parts stay powered: the charger performs the reset itself, and the fuel gauge sits on
 `VBAT_PROTECTED`, on the pack side of `Q3`, so it keeps counting coulombs through it. That
 is deliberate — a gauge that loses its supply has to relearn the pack — but it means **a

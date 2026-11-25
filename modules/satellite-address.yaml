@@ -15,7 +15,7 @@
 # (0x48 to 0x4B, set by its ADDR pin) and the DS2482 address (0x18 to 0x1B, set by AD0 and AD1).
 # They are kept in flash. An ESPHome I2C address is normally fixed at build time; here the saved
 # choice is read early in boot and handed to the two chips before they set up, so a change takes effect
-# at the next boot or wake. Power Cycle Board applies it at once.
+# at the next boot or wake. Restart applies it at once.
 #
 # Setup order: the selects (650) restore their saved choice, the hook below (640) copies it into the
 # chips, and the chips set up after (the 1-Wire bridge at 500, the ADS1115 at 600).
