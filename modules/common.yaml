@@ -27,6 +27,13 @@ switch:
     restore_mode: ALWAYS_ON
 
 # The board's UART0 pins are only test points; the USB-C port is the way to read logs.
+button:
+  # A software restart. Unlike the charger's "Power Cycle Board" it does not open the ship FET, so it also works from a low pack
+  # with no input. The SunSprout Monitor's setup guide uses it to apply changed satellite addresses.
+  - platform: restart
+    name: "Restart"
+    entity_category: diagnostic
+
 logger:
   level: INFO
   hardware_uart: USB_SERIAL_JTAG

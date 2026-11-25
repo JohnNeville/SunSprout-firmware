@@ -13,6 +13,11 @@
 # Override any of the substitutions below in your own config.
 
 substitutions:
+  # Pack voltage under which "Power Cycle Board" may not bring the board back when no input is present (see Power Cycle Status).
+  # Measured on two boards: it restarted at 3.47 V and above, and stayed off at 3.33 V and below. The charger's data sheet puts
+  # its wake-up threshold with a ship FET at 3.25 to 3.55 V.
+  power_cycle_min_voltage: "3.50"
+
   # Nominal capacity of the attached cell, in mAh. The fuel gauge's Design Capacity,
   # and the charge-termination current (C/10) for Li-ion; LiFePO4 terminates at 40 mA.
   battery_capacity: "6000"
@@ -169,6 +174,7 @@ bq25798:
 
   vbus_present:
     name: "Input Present"
+    id: charger_input_present
   vac1_present:
     name: "USB Input Present"
   vac2_present:
@@ -254,6 +260,10 @@ bq25798:
   # The charger and the fuel gauge both stay powered through it: U8 performs
   # the reset, and U3 sits on VBAT_PROTECTED on the pack side of Q3. It
   # therefore cannot clear a stuck I2C slave.
+  #
+  # With no input and a low pack the charger drops out while Q3 is open and cannot turn it on again, so the board stays off
+  # until power returns. The button is not blocked: "Power Cycle Status" says when that is likely. A software restart is not
+  # affected (it does not open Q3).
   power_cycle:
     name: "Power Cycle Board"
 
@@ -377,6 +387,28 @@ sensor:
 # Both lines are open-drain with 10 kOhm pull-ups on the board, so they are
 # active low. The charger pulse is short; the fault registers are the reliable
 # source, which the charger component polls anyway.
+text_sensor:
+  # Whether "Power Cycle Board" is likely to bring the board back right now.
+  - platform: template
+    name: "Power Cycle Status"
+    id: power_cycle_status
+    icon: "mdi:restart-alert"
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      if (!id(charger_input_present).has_state() || std::isnan(id(charger_vbat).state)) return {};
+      const float volts = id(charger_vbat).state;
+      const bool risky = !id(charger_input_present).state && volts < ${power_cycle_min_voltage};
+      static bool was_risky = false;
+      if (risky && !was_risky)
+        ESP_LOGW("power_cycle", "No input and the pack is at %.2f V (under %.2f V): Power Cycle Board may leave the board off until "
+                 "power returns. A restart is not affected.", volts, (float) ${power_cycle_min_voltage});
+      was_risky = risky;
+      if (!risky) return std::string("Safe");
+      char text[96];
+      snprintf(text, sizeof(text), "Risky: no input, pack %.2f V; may stay off until power returns", volts);
+      return std::string(text);
+
 binary_sensor:
   - platform: gpio
     name: "Charger Interrupt"
